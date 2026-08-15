@@ -1,0 +1,57 @@
+{
+  "_template_note": "Copy and rename to <TICKER>_<YYYY-MM-DD>.json. Remove this key.",
+  "_schema_version": "1.0",
+
+  "entry_metadata": {
+    "company": "",
+    "ticker": "",
+    "analysis_date": "",
+    "entry_type": "",
+    "price_at_decision": null,
+    "currency": ""
+  },
+
+  "decision_record": {
+    "recommendation": "",
+    "fair_value_range_low": null,
+    "fair_value_range_high": null,
+    "accumulation_zone": "",
+    "position_action": "",
+    "confidence": ""
+  },
+
+  "thesis_summary": {
+    "investment_thesis": "",
+    "bull_case": "",
+    "bear_case": "",
+    "key_assumptions": [],
+    "thesis_breakers": [],
+    "monitoring_criteria": []
+  },
+
+  "position_details": {
+    "shares_purchased_or_held": null,
+    "price_of_transaction": null,
+    "position_size_pct": null,
+    "reason_for_size": ""
+  },
+
+  "context": {
+    "market_conditions_note": "",
+    "portfolio_context_note": "",
+    "key_catalysts_or_triggers": []
+  },
+
+  "future_review": {
+    "next_review_date": "",
+    "review_trigger_conditions": [],
+    "what_would_make_me_sell": [],
+    "what_would_make_me_add": []
+  },
+
+  "previous_thesis_comparison": {
+    "previous_analysis_date": "",
+    "what_changed": "",
+    "thesis_evolution_note": ""
+  }
+}

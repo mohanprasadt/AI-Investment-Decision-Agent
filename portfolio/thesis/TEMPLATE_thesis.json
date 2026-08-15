@@ -1,0 +1,252 @@
+{
+  "_template_note": "Copy this file and rename to <TICKER>_thesis.json. Remove this _template_note key.",
+  "_schema_version": "1.0",
+
+  "company": {
+    "ticker": "",
+    "name": "",
+    "exchange": "",
+    "currency": "",
+    "sector": "",
+    "industry": "",
+    "geography": "",
+    "business_description": ""
+  },
+
+  "analysis_metadata": {
+    "analysis_date": "",
+    "analyst": "AI Investment Agent + Human Review",
+    "data_as_of_date": "",
+    "price_at_analysis": null,
+    "confidence_overall": "",
+    "confidence_note": ""
+  },
+
+  "business_understanding": {
+    "what_it_does": "",
+    "how_it_makes_money": "",
+    "main_products_services": [],
+    "main_customer_groups": [],
+    "revenue_sources": [],
+    "major_cost_drivers": [],
+    "geographic_exposure": {},
+    "key_business_drivers": [],
+    "major_competitors": [],
+    "understandability_flag": "Sufficient",
+    "understandability_note": ""
+  },
+
+  "industry_analysis": {
+    "industry_growth": "",
+    "long_term_demand": "",
+    "competitive_intensity": "",
+    "barriers_to_entry": "",
+    "regulation": "",
+    "cyclicality": "",
+    "capital_intensity": "",
+    "technology_disruption_risk": "",
+    "substitution_risk": "",
+    "industry_profitability": "",
+    "structural_trends": [],
+    "classification": "",
+    "classification_reasoning": ""
+  },
+
+  "competitive_advantage": {
+    "moat_sources_investigated": {
+      "network_effects": {"present": false, "evidence": "", "durability": ""},
+      "switching_costs": {"present": false, "evidence": "", "durability": ""},
+      "cost_advantage": {"present": false, "evidence": "", "durability": ""},
+      "scale": {"present": false, "evidence": "", "durability": ""},
+      "brand": {"present": false, "evidence": "", "durability": ""},
+      "intellectual_property": {"present": false, "evidence": "", "durability": ""},
+      "regulatory_barriers": {"present": false, "evidence": "", "durability": ""},
+      "efficient_scale": {"present": false, "evidence": "", "durability": ""},
+      "ecosystem": {"present": false, "evidence": "", "durability": ""},
+      "distribution_advantage": {"present": false, "evidence": "", "durability": ""},
+      "data_advantage": {"present": false, "evidence": "", "durability": ""},
+      "other": {"present": false, "evidence": "", "durability": ""}
+    },
+    "moat_strength": "",
+    "moat_durability": "",
+    "moat_trajectory": "",
+    "current_vs_emerging": "",
+    "moat_reasoning": "",
+    "moat_threats": []
+  },
+
+  "financial_summary": {
+    "revenue_growth": {
+      "cagr_3yr": null,
+      "cagr_5yr": null,
+      "cagr_10yr": null,
+      "annual_rates": {},
+      "negative_growth_years": null,
+      "growth_consistency_note": "",
+      "organic_vs_acquisition_note": ""
+    },
+    "roic": {
+      "current": null,
+      "avg_3yr": null,
+      "avg_5yr": null,
+      "trend": "",
+      "classification": ""
+    },
+    "margins": {
+      "gross_margin_current": null,
+      "gross_margin_trend": "",
+      "operating_margin_current": null,
+      "operating_margin_trend": "",
+      "net_margin_current": null,
+      "fcf_margin_current": null
+    },
+    "free_cash_flow": {
+      "fcf_trend": "",
+      "fcf_consistency": "",
+      "fcf_conversion_ratio": null,
+      "capex_intensity": "",
+      "recurring_negative_fcf": false,
+      "fcf_note": ""
+    },
+    "debt": {
+      "debt_to_assets_pct": null,
+      "classification": "",
+      "interest_coverage": null,
+      "fcf_to_debt": null,
+      "debt_trend": "",
+      "debt_note": ""
+    },
+    "earnings_quality": {
+      "eps_growth_trend": "",
+      "fcf_vs_net_income": "",
+      "earnings_consistency": "",
+      "earnings_quality_note": ""
+    },
+    "financial_quality_overall": "",
+    "financial_quality_note": ""
+  },
+
+  "dividend": {
+    "pays_dividend": false,
+    "dividend_mandatory_for_thesis": false,
+    "current_yield_pct": null,
+    "payout_ratio_pct": null,
+    "fcf_payout_ratio_pct": null,
+    "dividend_growth_3yr_cagr": null,
+    "dividend_history_years": null,
+    "dividend_sustainability": "",
+    "dividend_note": ""
+  },
+
+  "management": {
+    "capital_allocation": "",
+    "execution_track_record": "",
+    "strategic_consistency": "",
+    "guidance_credibility": "",
+    "governance": "",
+    "incentive_alignment": "",
+    "insider_ownership_note": "",
+    "notable_acquisitions": [],
+    "overall_rating": "",
+    "management_note": ""
+  },
+
+  "risks": {
+    "business_risks": [],
+    "financial_risks": [],
+    "industry_risks": [],
+    "competitive_risks": [],
+    "regulatory_risks": [],
+    "technology_risks": [],
+    "management_risks": [],
+    "valuation_risks": [],
+    "macro_risks": [],
+    "overall_risk_level": "",
+    "temporary_vs_structural_note": ""
+  },
+
+  "valuation": {
+    "methods_used": [],
+    "dcf": {
+      "discount_rate_used": null,
+      "terminal_growth_rate": null,
+      "revenue_growth_assumptions": {},
+      "margin_assumptions": {},
+      "fair_value_base": null,
+      "fair_value_bull": null,
+      "fair_value_bear": null,
+      "sensitivity_note": ""
+    },
+    "normalized_earnings": {
+      "normalized_eps": null,
+      "multiple_used": null,
+      "fair_value_estimate": null
+    },
+    "historical_valuation": {
+      "current_pe": null,
+      "historical_pe_range": "",
+      "current_ev_ebitda": null,
+      "historical_ev_ebitda_range": "",
+      "vs_history_note": ""
+    },
+    "peer_valuation": {
+      "peers_used": [],
+      "peer_comparison_note": ""
+    },
+    "fair_value_range_low": null,
+    "fair_value_range_high": null,
+    "fair_value_currency": "",
+    "valuation_confidence": "",
+    "valuation_note": "",
+    "current_price_at_analysis": null,
+    "upside_downside_pct": null
+  },
+
+  "portfolio_fit": {
+    "existing_position": false,
+    "current_shares": 0,
+    "average_cost": null,
+    "current_portfolio_weight_pct": null,
+    "sector_current_weight_pct": null,
+    "geography_current_weight_pct": null,
+    "business_overlap_note": "",
+    "concentration_tradeoff_note": "",
+    "portfolio_fit_assessment": ""
+  },
+
+  "bull_case": {
+    "key_assumptions": [],
+    "upside_scenario": "",
+    "fair_value_bull": null
+  },
+
+  "bear_case": {
+    "key_concerns": [],
+    "downside_scenario": "",
+    "fair_value_bear": null,
+    "devils_advocate_note": ""
+  },
+
+  "investment_thesis": {
+    "why_own_it": "",
+    "what_makes_business_attractive": "",
+    "growth_support": "",
+    "moat_support": "",
+    "valuation_attractiveness": "",
+    "key_assumptions": [],
+    "thesis_breakers": [],
+    "monitoring_criteria": []
+  },
+
+  "decision": {
+    "recommendation": "",
+    "accumulation_zone": "",
+    "accumulation_strategy": "",
+    "position_action": "",
+    "reasoning": "",
+    "review_trigger_conditions": [],
+    "next_review_date": ""
+  },
+
+  "history": []
+}

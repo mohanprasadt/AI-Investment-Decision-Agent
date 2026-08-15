@@ -1,0 +1,148 @@
+# ============================================================
+# Investment Decision Agent — Threshold Configuration
+# ============================================================
+# All thresholds are GUIDELINES, not absolute pass/fail rules.
+# The agent must interpret these in context of:
+#   - Industry norms
+#   - Business model
+#   - Emerging vs. mature company stage
+#   - Trajectory of the metric, not just current level
+# ============================================================
+
+# --- ROIC (Return on Invested Capital) ---
+roic:
+  excellent: 15.0       # >= 15% consistently = excellent
+  strong: 10.0          # 10–15% consistently = strong
+  watch: 7.0            # 7–10% = watch closely
+  concern: 7.0          # < 7% persistently = concern
+  note: >
+    Emerging companies may have lower current ROIC if trajectory is strongly
+    improving and underlying business economics are compelling.
+    Persistent high ROIC can SUPPORT the existence of a moat, but does not PROVE it.
+
+# --- Debt / Balance Sheet ---
+debt_to_assets:
+  preferred_max: 20.0   # 0–20% = preferred
+  acceptable_max: 40.0  # 20–40% = generally acceptable
+  investigate: 60.0     # 40–60% = investigate carefully
+  high_concern: 60.0    # > 60% = high leverage concern
+  note: >
+    These thresholds MUST be interpreted in industry context.
+    Financial institutions (banks, insurers) operate with very different
+    leverage norms than software or consumer companies.
+    Measure interest-bearing debt only, NOT total liabilities.
+    Accounts payable is NOT equivalent to borrowing.
+  metrics_to_also_evaluate:
+    - interest_coverage_ratio
+    - fcf_to_debt_ratio
+    - debt_trend
+    - ability_to_service_debt
+
+# --- Revenue Growth ---
+revenue_growth:
+  preferred_min_cagr_5yr: 5.0   # % — minimum preferred 5-year CAGR
+  strong_cagr_5yr: 10.0         # % — strong growth threshold
+  excellent_cagr_5yr: 15.0      # % — excellent growth threshold
+  max_negative_growth_years: 1  # preferred max years of revenue decline in 10yr history
+  note: >
+    Prefer consistent sustainable growth over extraordinary but inconsistent growth.
+    Evaluate: magnitude + consistency + trajectory.
+    Do not reward volatile growth simply because the CAGR is high.
+
+# --- Margins ---
+margins:
+  gross_margin:
+    strong: 40.0        # >= 40% gross margin = strong (varies enormously by industry)
+  operating_margin:
+    good: 15.0          # >= 15% operating margin = good
+    watch: 5.0          # < 5% = watch
+  fcf_margin:
+    good: 10.0          # >= 10% FCF margin = good
+  note: >
+    Margin levels must be evaluated in industry context.
+    Focus on: level, consistency, trend, peer comparison.
+    Investigate reasons for major changes.
+
+# --- Dividend ---
+dividend:
+  payout_ratio:
+    strong_cushion: 50.0    # < 50% = strong cushion
+    preferred_max: 70.0     # 50–70% = preferred range
+    caution: 85.0           # 70–85% = caution
+    sustainability_concern: 85.0   # > 85% = sustainability concern
+    significant_concern: 100.0     # >= 100% = significant concern
+  fcf_payout:
+    preferred_max: 75.0     # FCF payout ratio preferred below 75%
+  yield:
+    preferred_max: 6.0      # >= 6% yield requires investigation
+    investigate_note: >
+      High yield may indicate: falling stock price, business deterioration,
+      high payout, temporary event, cyclical business, or genuine attractive yield.
+      Never assume: high yield = good investment.
+  mandatory: false          # Dividend is NOT required for all companies
+  note: >
+    For high-growth companies, no dividend is acceptable if retained capital
+    can generate attractive returns.
+    For mature/slower-growth companies, dividend quality becomes more important.
+
+# --- Valuation ---
+valuation:
+  dcf_discount_rate_default: 9.0   # % — default WACC/discount rate assumption
+  terminal_growth_rate_default: 3.0 # % — default terminal growth rate
+  pe_ratio:
+    cheap: 15.0
+    fair: 20.0
+    expensive: 30.0
+    note: >
+      P/E alone must NOT drive valuation conclusions.
+      Use as ONE input in a multi-method framework.
+  ev_ebitda:
+    cheap: 8.0
+    fair: 12.0
+    expensive: 20.0
+  price_to_fcf:
+    cheap: 15.0
+    fair: 25.0
+    expensive: 40.0
+
+# --- Earnings Quality ---
+earnings_quality:
+  fcf_to_net_income_ratio_min: 0.70  # FCF should ideally be >= 70% of net income
+  note: >
+    Investigate when: revenue rises but FCF falls, or EPS rises but operating
+    economics deteriorate. Do not automatically treat as high-quality.
+
+# --- Business Understandability ---
+understandability:
+  flag_insufficient: true
+  note: >
+    If the business cannot be reasonably understood from available information,
+    flag "Insufficient Understanding" and do not force a positive conclusion.
+
+# --- Industry Classification ---
+industry_classification:
+  options:
+    - Attractive
+    - Neutral
+    - Challenging
+  note: >
+    A challenging industry does not automatically eliminate a company
+    if it possesses an exceptional competitive advantage.
+
+# --- Risk Classification ---
+risk:
+  overall_levels:
+    - Low
+    - Moderate
+    - High
+  distinguish_temporary_from_structural: true
+
+# --- Confidence Levels ---
+confidence:
+  levels:
+    - High
+    - Medium
+    - Low
+  note: >
+    Confidence reflects quality of analysis and data reliability,
+    NOT the probability that the stock will rise.

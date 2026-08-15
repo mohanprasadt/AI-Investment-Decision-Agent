@@ -1,0 +1,145 @@
+# ============================================================
+# Valuation Engine Configuration
+# ============================================================
+# Controls assumptions and methods used in fair value estimation.
+# All outputs should be ranges, not point estimates.
+# Do NOT produce false precision.
+# ============================================================
+
+# --- General ---
+general:
+  output_format: range         # Always output fair value as a range (e.g., $180–$220)
+  cases:
+    - base
+    - bull
+    - bear
+  require_confidence_rating: true
+  avoid_false_precision: true
+
+# --- DCF Settings ---
+dcf:
+  enabled: true
+  default_discount_rate: 9.0           # % WACC — adjust per company quality
+  discount_rate_by_quality:
+    exceptional_moat_low_risk: 7.5
+    strong_moat: 8.5
+    moderate_moat: 9.5
+    weak_or_no_moat: 11.0
+    high_uncertainty: 12.5
+  terminal_growth_rate_default: 3.0    # % — long-run nominal GDP proxy
+  terminal_growth_rate_max: 5.0        # % — cap; never exceed long-run GDP without justification
+  projection_years: 10
+  margin_of_safety_sensitivity: true   # Run sensitivity on key assumptions
+  note: >
+    Use reasonable, explicitly-stated assumptions.
+    Show sensitivity to: revenue growth, margin assumptions, discount rate.
+    Never use a single point estimate as the sole output.
+
+# --- Normalized Earnings Valuation ---
+normalized_earnings:
+  enabled: true
+  normalization_years: 3               # Years to average for normalized earnings
+  note: >
+    Use normalized earnings rather than blindly using one year's EPS.
+    Adjust for one-time items where identified.
+
+# --- Historical Valuation ---
+historical_valuation:
+  enabled: true
+  lookback_years: 5
+  metrics_to_compare:
+    - pe_ratio
+    - ev_ebitda
+    - price_to_fcf
+    - price_to_sales
+    - ev_to_sales
+  note: >
+    Compare current valuation against the company's own historical range.
+    A stock trading at the high end of its historical range needs stronger justification.
+    Context: historical range may itself be mispriced (e.g., market bubble periods).
+
+# --- Peer / Relative Valuation ---
+peer_valuation:
+  enabled: true
+  note: >
+    Use relevant industry peers only.
+    Do not compare companies simply because they are in the same broad sector.
+    Peers should be similar in: business model, growth profile, margin structure,
+    geographic exposure, and competitive position.
+
+# --- Margin of Safety Framework ---
+margin_of_safety:
+  note: >
+    Do not use a universal fixed percentage rule.
+    Margin of safety must reflect:
+    - Business quality (higher quality = lower required MOS)
+    - Predictability of cash flows
+    - Moat strength and durability
+    - Financial strength
+    - Growth uncertainty
+    - Valuation confidence
+    - Company stage (emerging vs. mature)
+  illustrative_ranges:
+    exceptional_quality_high_confidence: 10   # % below fair value midpoint
+    strong_quality_good_confidence: 15
+    moderate_quality_medium_confidence: 20
+    lower_quality_or_high_uncertainty: 30
+
+# --- Accumulation Zone Definitions ---
+accumulation_zones:
+  WAIT:
+    description: Price materially above reasonable fair value
+    action: Do not initiate or add
+  WATCH:
+    description: Business attractive but valuation not compelling
+    action: Monitor; prepare thesis; do not act yet
+  START_SMALL:
+    description: Reasonably attractive entry point
+    action: Initiate a small position; plan to add on weakness
+  ACCUMULATE:
+    description: Attractive valuation with sufficient margin of safety
+    action: Add to position according to accumulation plan
+
+# --- Valuation Confidence Definitions ---
+valuation_confidence:
+  High:
+    criteria: >
+      Multiple methods converge, business is predictable, strong data quality,
+      clear growth trajectory, low macro sensitivity
+  Medium:
+    criteria: >
+      Methods generally agree but some uncertainty in key assumptions;
+      some data gaps; moderate business predictability
+  Low:
+    criteria: >
+      Methods diverge significantly; high uncertainty in key assumptions;
+      limited financial history; business in transition; high macro sensitivity
+
+# --- Currency Handling ---
+currencies:
+  supported:
+    - CAD    # Canadian Dollar
+    - USD    # US Dollar
+    - INR    # Indian Rupee
+  base_currency: CAD
+  note: >
+    When comparing cross-currency valuations, clearly state the currency
+    and the assumed exchange rate used.
+    Display both local-currency and base-currency values where relevant.
+
+# --- Data Source Priority for Valuation ---
+data_source_priority:
+  - company_filings       # SEC / SEDAR+ / Annual Reports (Tier 1)
+  - financial_databases   # Reputable financial data providers (Tier 2)
+  - analyst_estimates     # Use with caution; clearly labeled (Tier 2/3)
+  - yfinance              # Free data source; verify against primary sources
+
+# --- Staleness Policy ---
+staleness:
+  max_acceptable_age_days: 90    # Flag data older than 90 days
+  current_price_max_age_hours: 24
+  require_as_of_date: true       # Always display data as-of date
+  note: >
+    Always clearly distinguish: historical data / current market data /
+    recent news / analyst estimates / user-provided information.
+    For current valuation, obtain fresh data where possible.
