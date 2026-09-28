@@ -109,11 +109,11 @@ def _latest_bs(balance_sheet: Dict[str, Any], field: str) -> Optional[float]:
         return None
 
 
-def _default_fetch(ticker: str) -> Dict[str, Any]:
+def _default_fetch(ticker: str, force_refresh: bool = False) -> Dict[str, Any]:
     """Fetch via yfinance (requires network). Returns dict from fetch_ticker()."""
     try:
         from data.ingestion.fetcher import fetch_ticker  # type: ignore
-        return fetch_ticker(ticker)
+        return fetch_ticker(ticker, force_refresh=force_refresh)
     except ImportError as e:
         raise RuntimeError(
             f"yfinance or data.ingestion.fetcher not available: {e}. "
@@ -140,7 +140,8 @@ def load_ticker(
     ticker: str,
     analysis_date: str = "",
     *,
-    _fetch_fn: Callable[[str], Dict[str, Any]] = _default_fetch,
+    force_refresh: bool = False,
+    _fetch_fn: Callable = None,   # Callable[[str], Dict[str, Any]]; None → _default_fetch with force_refresh
     _normalize_fn: Callable = _default_normalize,
 ) -> DataLoadResult:
     """
@@ -160,6 +161,11 @@ def load_ticker(
     """
     if not analysis_date:
         analysis_date = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Resolve fetch function: use the injected one (for tests) or build the
+    # default which captures force_refresh via a closure.
+    if _fetch_fn is None:
+        _fetch_fn = lambda t: _default_fetch(t, force_refresh=force_refresh)
 
     result = DataLoadResult(ticker=ticker)
 

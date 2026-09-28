@@ -1,0 +1,138 @@
+{
+  "started": "2026-08-16T03:00:52.636050+00:00",
+  "env": {
+    "python": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+    "yfinance": "1.5.2"
+  },
+  "scenarios": {
+    "A_burst": {
+      "inter_ticker_sleep_s": 0,
+      "retries_fired": [],
+      "retry_activated": false,
+      "rows": [
+        {
+          "ticker": "FTS.TO",
+          "timestamp": "2026-08-16T03:00:55.321422+00:00",
+          "info_fetch_success": true,
+          "info_fetch_error": null,
+          "financials_fetch_success": true,
+          "financials_fetch_error": null,
+          "history_fetch_success": true,
+          "history_fetch_error": null,
+          "load_ok": true,
+          "cannot_complete_reason": null,
+          "data_completeness_pct": 100.0,
+          "http_requests": 7,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=trailingPegRatio&period1=1771113600&period2=1786924800",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annualNormalizedD...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumber,annualShar...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annualFreeCashFlow...",
+            "https://query2.finance.yahoo.com/v8/finance/chart/FTS.TO"
+          ],
+          "elapsed_s": 10.63,
+          "error": null,
+          "got_429": false
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "timestamp": "2026-08-16T03:01:05.950847+00:00",
+          "info_fetch_success": true,
+          "info_fetch_error": null,
+          "financials_fetch_success": true,
+          "financials_fetch_error": null,
+          "history_fetch_success": true,
+          "history_fetch_error": null,
+          "load_ok": true,
+          "cannot_complete_reason": null,
+          "data_completeness_pct": 100.0,
+          "http_requests": 7,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/TATASTEEL.NS",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=trailingPegRatio&period1=1771113600&period2=1786924800",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annua...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumbe...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annual...",
+            "https://query2.finance.yahoo.com/v8/finance/chart/TATASTEEL.NS"
+          ],
+          "elapsed_s": 3.45,
+          "error": null,
+          "got_429": false
+        }
+      ],
+      "total_http_requests": 14,
+      "any_429": false,
+      "all_load_ok": true,
+      "scenario_elapsed_s": 17.2
+    },
+    "B_spaced": {
+      "inter_ticker_sleep_s": 35,
+      "retries_fired": [],
+      "retry_activated": false,
+      "rows": [
+        {
+          "ticker": "FTS.TO",
+          "timestamp": "2026-08-16T03:02:43.046453+00:00",
+          "info_fetch_success": true,
+          "info_fetch_error": null,
+          "financials_fetch_success": true,
+          "financials_fetch_error": null,
+          "history_fetch_success": true,
+          "history_fetch_error": null,
+          "load_ok": true,
+          "cannot_complete_reason": null,
+          "data_completeness_pct": 100.0,
+          "http_requests": 7,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=trailingPegRatio&period1=1771113600&period2=1786924800",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annualNormalizedD...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumber,annualShar...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annualFreeCashFlow...",
+            "https://query2.finance.yahoo.com/v8/finance/chart/FTS.TO"
+          ],
+          "elapsed_s": 4.44,
+          "error": null,
+          "got_429": false
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "timestamp": "2026-08-16T03:03:22.486687+00:00",
+          "info_fetch_success": true,
+          "info_fetch_error": null,
+          "financials_fetch_success": true,
+          "financials_fetch_error": null,
+          "history_fetch_success": true,
+          "history_fetch_error": null,
+          "load_ok": true,
+          "cannot_complete_reason": null,
+          "data_completeness_pct": 100.0,
+          "http_requests": 7,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/TATASTEEL.NS",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=trailingPegRatio&period1=1771113600&period2=1786924800",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annua...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumbe...",
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annual...",
+            "https://query2.finance.yahoo.com/v8/finance/chart/TATASTEEL.NS"
+          ],
+          "elapsed_s": 3.08,
+          "error": null,
+          "got_429": false
+        }
+      ],
+      "total_http_requests": 14,
+      "any_429": false,
+      "all_load_ok": true,
+      "scenario_elapsed_s": 46.1
+    }
+  },
+  "verdict": "NOT REPRODUCED",
+  "verdict_detail": "Scenario A did NOT produce a 429 in this run. Yahoo's threshold may be higher than the burst rate tested, or the rate-limit window has already cleared from a prior session.",
+  "finished": "2026-08-16T03:03:25.956299+00:00"
+}

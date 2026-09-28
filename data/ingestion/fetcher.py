@@ -68,7 +68,12 @@ def _cache_path(ticker: str, data_type: str) -> Path:
 
 
 def _load_cache(ticker: str, data_type: str, max_age_hours: int = 24) -> Optional[dict]:
-    """Load cached data if it exists and is fresh enough."""
+    """Load cached data if it exists and is fresh enough.
+
+    P1: A cached entry whose ``_fetch_success`` is ``False`` is treated as a
+    cache miss so the caller retries the underlying yfinance request rather
+    than serving stale failure data for the full TTL.
+    """
     path = _cache_path(ticker, data_type)
     if not path.exists():
         return None
@@ -79,6 +84,16 @@ def _load_cache(ticker: str, data_type: str, max_age_hours: int = 24) -> Optiona
         age = datetime.utcnow() - fetched_at
         if age > timedelta(hours=max_age_hours):
             log.debug(f"Cache expired for {ticker}/{data_type} (age: {age})")
+            return None
+        # P1: Do not serve a previously failed fetch as a valid cache hit.
+        # Returning None here causes the caller to retry yfinance immediately
+        # rather than blocking retries for the full TTL (24 h for history,
+        # 48 h for financials).
+        if not cached.get("_fetch_success", True):
+            log.debug(
+                f"Cache miss (prior failed fetch) for {ticker}/{data_type} "
+                "— will retry fetch"
+            )
             return None
         return cached
     except Exception as e:
@@ -200,6 +215,27 @@ def fetch_financials(ticker: str, force_refresh: bool = False, max_age_hours: in
         result["income_stmt"] = df_to_dict(t.financials)
         result["balance_sheet"] = df_to_dict(t.balance_sheet)
         result["cash_flow"] = df_to_dict(t.cashflow)
+
+        # P0: If ALL three statements are empty, yfinance returned no data.
+        # This typically occurs when Yahoo Finance rate-limits the financial-
+        # data endpoint: yfinance silently catches the error internally and
+        # returns an empty DataFrame instead of raising.  Treat all-empty as a
+        # failed fetch so the result is not cached, allowing the next request
+        # to retry.  A partial result (at least one non-empty statement) is
+        # still considered success and is cached normally.
+        if not result["income_stmt"] and not result["balance_sheet"] and not result["cash_flow"]:
+            result["_fetch_error"] = (
+                "yfinance returned empty DataFrames for all financial statements "
+                "(income statement, balance sheet, cash flow). "
+                "This typically indicates a Yahoo Finance rate-limit on the "
+                "financial-data endpoint. Result not cached — next request will retry."
+            )
+            log.warning(
+                f"fetch_financials: all statements empty for {ticker} "
+                "(likely rate-limited or data unavailable) — not caching"
+            )
+            return result   # _fetch_success remains False; no _save_cache call
+
         result["_fetch_success"] = True
         _save_cache(ticker, "financials", result)
         time.sleep(0.5)
@@ -220,6 +256,11 @@ def fetch_history(
     Fetch price history.
 
     Returns {dates: [...], closes: [...], _fetch_success, _fetch_error}
+
+    Cache behaviour (mirrors fetch_financials P0 fix):
+    - Successful fetch (non-empty DataFrame) → _fetch_success=True, result cached.
+    - Empty DataFrame → _fetch_success=False, result NOT cached; next request retries.
+    - Exception → _fetch_success=False, result NOT cached (existing behaviour).
     """
     cache_key = f"history_{period}"
     if not force_refresh:
@@ -243,8 +284,20 @@ def fetch_history(
             result["dates"] = [d.isoformat() for d in hist.index]
             result["closes"] = [float(c) for c in hist["Close"]]
             result["_fetch_success"] = True
-        _save_cache(ticker, cache_key, result)
-        time.sleep(0.3)
+            _save_cache(ticker, cache_key, result)
+            time.sleep(0.3)
+        else:
+            # Empty DataFrame — typically Yahoo Finance rate-limiting this endpoint.
+            # Do NOT cache: next request must retry rather than serving a dead entry.
+            result["_fetch_error"] = (
+                "yfinance returned an empty history DataFrame. "
+                "This typically indicates a Yahoo Finance rate-limit or data "
+                "unavailability. Result not cached — next request will retry."
+            )
+            log.warning(
+                f"fetch_history: empty result for {ticker} ({period}) "
+                "(likely rate-limited or data unavailable) — not caching"
+            )
     except Exception as e:
         result["_fetch_error"] = str(e)
         log.warning(f"Failed to fetch history for {ticker}: {e}")
@@ -337,10 +390,46 @@ def fetch_status_report(results: Dict[str, FetchResult]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def fetch_ticker(ticker: str, force_refresh: bool = False) -> FetchResult:
-    """Convenience: fetch all data for a single ticker."""
+    """Convenience: fetch all data for a single ticker.
+
+    Short-circuit on info failure: when fetch_info() returns _fetch_success=False
+    (typically HTTP 429 / rate limit), fetch_financials() and fetch_history() are
+    NOT called.  Sending additional requests to Yahoo while rate-limited extends
+    the rate-limit window rather than letting it clear.  The skipped components are
+    returned as _fetch_success=False stubs so callers can distinguish "skipped due
+    to info failure" from genuine data unavailability.
+    """
     is_etf = ticker in KNOWN_ETFS
+    info = fetch_info(ticker, force_refresh=force_refresh)
+
+    if not info.get("_fetch_success"):
+        _skip_reason = (
+            "Skipped — fetch_info() failed (likely HTTP 429 / rate limit). "
+            "Sending additional Yahoo Finance requests while rate-limited extends "
+            "the rate-limit window. Retry the full fetch after the window clears."
+        )
+        return {
+            "info": info,
+            "financials": {
+                "_ticker": ticker,
+                "_fetch_success": False,
+                "_fetch_error": _skip_reason,
+                "income_stmt": {},
+                "balance_sheet": {},
+                "cash_flow": {},
+            },
+            "history": {
+                "_ticker": ticker,
+                "_fetch_success": False,
+                "_fetch_error": _skip_reason,
+                "dates": [],
+                "closes": [],
+            },
+            "is_etf": is_etf,
+        }
+
     return {
-        "info": fetch_info(ticker, force_refresh=force_refresh),
+        "info": info,
         "financials": fetch_financials(ticker, force_refresh=force_refresh) if not is_etf else {},
         "history": fetch_history(ticker, force_refresh=force_refresh),
         "is_etf": is_etf,

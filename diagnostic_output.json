@@ -1,0 +1,249 @@
+{
+  "timestamp": "2026-08-15T20:27:54.003429",
+  "step1_environment": {
+    "python_version": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+    "python_executable": "C:\\Python314\\python.exe",
+    "platform": "win32",
+    "cwd": "C:\\Users\\itsmo\\OneDrive\\Desktop\\Projects\\AI-Investment-Decision-Agent",
+    "yfinance_version": "1.5.2",
+    "pandas_version": "3.0.3",
+    "requests_version": "2.34.2",
+    "httpx_version": "0.28.1",
+    "pip_show": "Name: yfinance\nVersion: 1.5.2\nSummary: Download market data from Yahoo! Finance API\nHome-page: https://github.com/ranaroussi/yfinance\nAuthor: Ran Aroussi\nAuthor-email: ran@aroussi.com\nLicense: Apache\nLocation: C:\\Users\\itsmo\\AppData\\Roaming\\Python\\Python314\\site-packages\nRequires: beautifulsoup4, curl_cffi, multitasking, numpy, pandas, peewee, platformdirs, protobuf, pytz, requests, websockets\nRequired-by: \n---\nName: streamlit\nVersion: 1.58.0\nSummary: A faster way to build and share data apps\nHome-page: https://streamlit.io\nAuthor: \nAuthor-email: Snowflake Inc <hello@streamlit.io>\nLicense-Expression: Apache-2.0\nLocation: C:\\Users\\itsmo\\AppData\\Roaming\\Python\\Python314\\site-packages\nRequires: altair, anyio, blinker, cachetools, click, gitpython, httptools, itsdangerous, numpy, packaging, pandas, pillow, protobuf, pyarrow, pydeck, python-multipart, requests, starlette, tenacity, toml, typing-extensions, uvicorn, watchdog, websockets\nRequired-by: \n---\nName: pandas\nVersion: 3.0.3\nSummary: Powerful data structures for data analysis, time series, and statistics\nHome-page: https://pandas.pydata.org\nAuthor: \nAuthor-email: The Pandas Development Team <pandas-dev@python.org>\nLicense: BSD 3-Clause License\n\n Copyright (c) 2008-2011, AQR Capital Management, LLC, Lambda Foundry, Inc. and PyData Development Team\n All rights reserved.\n\n Copyright (c) 2011-2026, Open source contributors.\n\n Redistribution and use in source and binary forms, with or without\n modification, are permitted provided that the following conditions are met:\n\n * Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n * Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n * Neither the name of the copyright holder nor the names of its\n   contributors may be used to endorse or promote products derived from\n   this software without specific prior written permission.\n\n THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\n AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\n DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\n FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\n DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\n SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\n CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\n OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\n OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n\nLocation: C:\\Users\\itsmo\\AppData\\Roaming\\Python\\Python314\\site-packages\nRequires: numpy, python-dateutil, tzdata\nRequired-by: markitdown, streamlit, yfinance"
+  },
+  "step2_tickers": {
+    "ENB.TO": {
+      "ticker": "ENB.TO",
+      "info": {
+        "keys": 182,
+        "price": 70.61,
+        "name": "Enbridge Inc.",
+        "error": null
+      },
+      "income_stmt": {
+        "rows": 53,
+        "cols": 5,
+        "col_names": [
+          "2025-12-31 00:00:00",
+          "2024-12-31 00:00:00",
+          "2023-12-31 00:00:00",
+          "2022-12-31 00:00:00"
+        ],
+        "index_names": [
+          "Tax Effect Of Unusual Items",
+          "Tax Rate For Calcs",
+          "Normalized EBITDA",
+          "Total Unusual Items",
+          "Total Unusual Items Excluding Goodwill"
+        ],
+        "error": null,
+        "source": "income_stmt"
+      },
+      "balance_sheet": {
+        "rows": 89,
+        "error": null,
+        "cols": 5
+      },
+      "cash_flow": {
+        "rows": 67,
+        "error": null,
+        "cols": 5
+      },
+      "history_1mo": {
+        "rows": 23,
+        "last_close": 70.61000061035156,
+        "error": null
+      }
+    },
+    "MSFT": {
+      "ticker": "MSFT",
+      "info": {
+        "keys": 185,
+        "price": 495.4,
+        "name": "Microsoft Corporation",
+        "error": null
+      },
+      "income_stmt": {
+        "rows": 47,
+        "cols": 4,
+        "col_names": [
+          "2026-06-30 00:00:00",
+          "2025-06-30 00:00:00",
+          "2024-06-30 00:00:00",
+          "2023-06-30 00:00:00"
+        ],
+        "index_names": [
+          "Tax Effect Of Unusual Items",
+          "Tax Rate For Calcs",
+          "Normalized EBITDA",
+          "Total Unusual Items",
+          "Total Unusual Items Excluding Goodwill"
+        ],
+        "error": null,
+        "source": "income_stmt"
+      },
+      "balance_sheet": {
+        "rows": 79,
+        "error": null,
+        "cols": 5
+      },
+      "cash_flow": {
+        "rows": 59,
+        "error": null,
+        "cols": 5
+      },
+      "history_1mo": {
+        "rows": 23,
+        "last_close": 495.3999938964844,
+        "error": null
+      }
+    },
+    "FTS.TO": {
+      "ticker": "FTS.TO",
+      "info": {
+        "keys": 180,
+        "price": 78.68,
+        "name": "Fortis Inc.",
+        "error": null
+      },
+      "income_stmt": {
+        "rows": 50,
+        "cols": 5,
+        "col_names": [
+          "2025-12-31 00:00:00",
+          "2024-12-31 00:00:00",
+          "2023-12-31 00:00:00",
+          "2022-12-31 00:00:00"
+        ],
+        "index_names": [
+          "Tax Effect Of Unusual Items",
+          "Tax Rate For Calcs",
+          "Normalized EBITDA",
+          "Total Unusual Items",
+          "Total Unusual Items Excluding Goodwill"
+        ],
+        "error": null,
+        "source": "income_stmt"
+      },
+      "balance_sheet": {
+        "rows": 87,
+        "error": null,
+        "cols": 5
+      },
+      "cash_flow": {
+        "rows": 57,
+        "error": null,
+        "cols": 5
+      },
+      "history_1mo": {
+        "rows": 23,
+        "last_close": 78.68000030517578,
+        "error": null
+      }
+    },
+    "ITC.NS": {
+      "ticker": "ITC.NS",
+      "info": {
+        "keys": 164,
+        "price": 278.2,
+        "name": "ITC Limited",
+        "error": null
+      },
+      "income_stmt": {
+        "rows": 53,
+        "cols": 5,
+        "col_names": [
+          "2026-03-31 00:00:00",
+          "2025-03-31 00:00:00",
+          "2024-03-31 00:00:00",
+          "2023-03-31 00:00:00"
+        ],
+        "index_names": [
+          "Tax Effect Of Unusual Items",
+          "Tax Rate For Calcs",
+          "Normalized EBITDA",
+          "Total Unusual Items",
+          "Total Unusual Items Excluding Goodwill"
+        ],
+        "error": null,
+        "source": "income_stmt"
+      },
+      "balance_sheet": {
+        "rows": 82,
+        "error": null,
+        "cols": 5
+      },
+      "cash_flow": {
+        "rows": 52,
+        "error": null,
+        "cols": 5
+      },
+      "history_1mo": {
+        "rows": 24,
+        "last_close": 278.20001220703125,
+        "error": null
+      }
+    },
+    "CNQ.TO": {
+      "ticker": "CNQ.TO",
+      "info": {
+        "keys": 179,
+        "price": 66.41,
+        "name": "Canadian Natural Resources Limited",
+        "error": null
+      },
+      "income_stmt": {
+        "rows": 46,
+        "cols": 5,
+        "col_names": [
+          "2025-12-31 00:00:00",
+          "2024-12-31 00:00:00",
+          "2023-12-31 00:00:00",
+          "2022-12-31 00:00:00"
+        ],
+        "index_names": [
+          "Tax Effect Of Unusual Items",
+          "Tax Rate For Calcs",
+          "Normalized EBITDA",
+          "Total Unusual Items",
+          "Total Unusual Items Excluding Goodwill"
+        ],
+        "error": null,
+        "source": "income_stmt"
+      },
+      "balance_sheet": {
+        "rows": 60,
+        "error": null,
+        "cols": 5
+      },
+      "cash_flow": {
+        "rows": 49,
+        "error": null,
+        "cols": 5
+      },
+      "history_1mo": {
+        "rows": 23,
+        "last_close": 66.41000366210938,
+        "error": null
+      }
+    }
+  },
+  "step3_version_check": {
+    "pip_index": "yfinance (1.6.0)\nAvailable versions: 1.6.0, 1.5.2, 1.5.1, 1.4.1, 1.4.0, 1.3.0, 1.2.2, 1.2.1, 1.2.0, 1.1.0, 1.0, 0.2.66, 0.2.65, 0.2.64, 0.2.63, 0.2.62, 0.2.61, 0.2.60, 0.2.59, 0.2.58, 0.2.57, 0.2.56, 0.2.55, 0.2.54, 0.2.53, 0.2.52, 0.2.51, 0.2.50, 0.2.49, 0.2.48, 0.2.47, 0.2.46, 0.2.45, 0.2.44, 0.2.43, 0.2.42, 0.2.41, 0.2.40, 0.2.39, 0.2.38, 0.2.37, 0.2.36, 0.2.35, 0.2.34, 0.2.33, 0.2.32, 0.2.31, 0.2.30, 0.2.29, 0.2.28, 0.2.27, 0.2.26, 0.2.25, 0.2.24, 0.2.23, 0.2.22, 0.2.21, 0.2.20, 0.2.19, 0.2.18, 0.2.17, 0.2.16, 0.2.15, 0.2.14, 0.2.13, 0.2.12, 0.2.11, 0.2.10, 0.2.9, 0.2.7, 0.2.6, 0.2.5, 0.2.4, 0.2.3, 0.2.2, 0.2.1, 0.1.96, 0.1.95, 0.1.94, 0.1.93, 0.1.92, 0.1.91, 0.1.90, 0.1.89, 0.1.87, 0.1.86, 0.1.85, 0.1.84, 0.1.83, 0.1.82, 0.1.81, 0.1.80, 0.1.79, 0.1.78, 0.1.77, 0.1.75, 0.1.74, 0.1.73, 0.1.72, 0.1.71, 0.1.70, 0.1.69, 0.1.68, 0.1.67, 0.1.66, 0.1.65, 0.1.64, 0.1.63, 0.1.62, 0.1.61, 0.1.60, 0.1.59, 0.1.58, 0.1.57, 0.1.56, 0.1.55, 0.1.54, 0.1.53, 0.1.52, 0.1.51, 0.1.50, 0.1.49, 0.1.48, 0.1.47, 0.1.46, 0.1.45, 0.1.44, 0.1.43, 0.1.42, 0.1.41, 0.1.40, 0.1.39, 0.1.38, 0.1.37, 0.1.36\n  INSTALLED: 1.5.2\n  LATEST:    1.6.0"
+  },
+  "step4_raw_inspection": {
+    "debug_log": "Entering _fetch_time_series()\nExiting _fetch_time_series()\n",
+    "income_rows": 53,
+    "ticker_attrs": {
+      "_data": "<class 'yfinance.data.YfData'>",
+      "_financials": "<class 'NoneType'>",
+      "_fundamentals": "<class 'yfinance.scrapers.fundamentals.Fundamentals'>"
+    }
+  },
+  "step5_itcns_fresh": {
+    "income_rows": 53,
+    "balance_rows": 82,
+    "cf_rows": 52,
+    "error": null
+  }
+}

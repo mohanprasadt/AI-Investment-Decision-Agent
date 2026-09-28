@@ -1,0 +1,26 @@
+# AI Investment Decision Agent — Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+yfinance>=0.2.0          # Financial data (no API key required)
+requests>=2.28.0         # HTTP client (used by yfinance)
+pyyaml>=6.0              # Configuration files (thresholds.yaml, valuation_config.yaml)
+
+# ── Qualitative research ───────────────────────────────────────────────────────
+anthropic>=0.20.0        # Claude API for Phase 4 business research
+                         # Requires: ANTHROPIC_API_KEY environment variable
+                         # Without it, pipeline uses quantitative fallback
+
+# ── UI ────────────────────────────────────────────────────────────────────────
+streamlit>=1.32.0        # Phase 10 conversational UI
+
+# ── Optional convenience ──────────────────────────────────────────────────────
+python-dotenv>=1.0.0     # Loads ANTHROPIC_API_KEY from .env file (optional)
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=7.0.0
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+# Python 3.10+ required.
+# No database dependencies — MVP state is in-memory (st.session_state).
+# No authentication dependencies — single-user local tool for MVP.

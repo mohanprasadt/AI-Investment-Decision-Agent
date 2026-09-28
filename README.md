@@ -279,12 +279,23 @@ AI-Investment-Decision-Agent/
 
 ---
 
+## Current Phase
+
+**Last completed: Phase 10.6 — Documentation & Product Governance Foundation**
+
+The system now includes a conversational Streamlit UI, a 33-ticker MVP universe (25 Canada, 5 USA, 3 India), and a complete documentation pack at `docs/README.md`.
+
+---
+
 ## Setup and Usage
 
 ### Requirements
 
-- Python 3.10+
-- `pip install yfinance anthropic pyyaml pytest`
+```bash
+pip install -r requirements.txt
+```
+
+Requires Python 3.10+. See `requirements.txt` for pinned dependencies (yfinance, anthropic, streamlit, pyyaml, python-dotenv, pytest).
 
 ### Environment Variables
 
@@ -298,7 +309,19 @@ The API key is required only for the qualitative research phase (Phase 4). Witho
 
 yfinance requires no API key.
 
-### Running the Agent
+### Running the UI (recommended)
+
+```bash
+# Pre-warm the cache before first use (run once; takes ~25 min for 33 tickers)
+python scripts/prewarm_mvp.py
+
+# Launch the conversational Streamlit interface
+streamlit run run_ui.py
+```
+
+The UI opens at `http://localhost:8501`. Select a ticker from the 33-ticker dropdown (or enter a custom ticker), optionally provide a portfolio weight, and click Analyse. Follow-up questions are answered from the held session without re-fetching data.
+
+### Running the CLI (advanced)
 
 ```bash
 # Analyse a ticker (requires yfinance network access)
@@ -319,42 +342,32 @@ python -m pytest
 
 # Specific phase
 python -m pytest tests/test_phase99.py -v
-
-# Quick smoke test (no network required for cached tickers)
-python -m pytest tests/test_phase93b.py tests/test_phase99.py -q
 ```
 
 ### Data Cache
 
-yfinance responses are cached in `data/cache/` (gitignored). To force a fresh fetch, delete the relevant cache file or run the fetcher directly.
+yfinance responses are cached as flat JSON files in `data/cache/` (gitignored). TTLs: company info 24h, financials 48h, price history 24h. Use `Force Refresh` in the UI or re-run `scripts/prewarm_mvp.py` to refresh stale data.
 
 ---
 
 ## Testing
 
-**Verified baseline: Phase 9.9b — PASS**
+**Current baseline: Phase 10.6 — 1,223 passed**
 
 ```
-Total collected:  1072
-Passed:           1071
-Skipped:             1
-Failed:              0
-New failures:        0
+Passed:    1,223
+Skipped:       1
+Failed:        5  (pre-existing — network-dependent, test_phase93b.py only)
+Errors:        3  (pre-existing — collection errors in legacy helper files)
 ```
 
-**Pre-existing fixture errors (3, unchanged):**
+**Pre-existing failures (5):** `test_phase93b.py` makes live yfinance calls; these fail in network-restricted or rate-limited environments. Not regressions.
 
-`test_calculations.py`, `test_ingestion.py`, and `test_quality_engine.py` each define a helper named `def test(name, condition, value=None)` which conflicts with pytest's built-in `name` fixture. These are not test failures — they are collection errors in three legacy test files that use a non-pytest helper pattern. All substantive tests in those files (e.g., `test_cagr`, `test_gross_margin`) run and pass correctly.
+**Pre-existing collection errors (3):** `test_calculations.py`, `test_ingestion.py`, `test_quality_engine.py` each define a `def test(...)` helper that conflicts with pytest's `name` fixture. All substantive tests in those files run and pass correctly.
 
-**Phase 9.9b test coverage:**
+**Phase 10.5 coverage (107 tests):** pipeline, 429 fail-fast, prewarm, ticker dropdown, data status panel, Force Refresh, conversation intents, session state, UI rendering.
 
-`tests/test_phase99.py` covers:
-- TestA: Continuing-ops NI preferred over total NI for EPS derivation
-- TestB: Total NI fallback when continuing-ops field is unavailable
-- TestC: Legitimate zero NI values preserved, not treated as missing
-- TestD: Common fiscal-year window alignment between EPS and FCF
-- TestE: Renderer correctly detects SAME-PERIOD BASIS vs PERIOD MISMATCH by comparing actual year sets
-- TestF: Synthetic fixtures with no discontinued operations produce identical results
+**Phase 9.9b coverage (63 tests):** continuing-ops NI preference, total NI fallback, common fiscal-year window alignment, SAME-PERIOD BASIS / PERIOD MISMATCH renderer.
 
 ---
 
@@ -390,4 +403,5 @@ The authors and contributors accept no liability for investment decisions made b
 
 ---
 
-*Phase 9.9b verified baseline — August 2026*
+*Phase 10.6 — Documentation & Product Governance Foundation — September 2026*  
+*Full documentation: [`docs/README.md`](docs/README.md)*

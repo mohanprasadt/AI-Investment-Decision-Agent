@@ -1,0 +1,560 @@
+{
+  "started": "2026-08-16T02:41:49.516497+00:00",
+  "tests": {
+    "T2_internal_cache": {
+      "cache_dir": "C:\\Users\\itsmo\\AppData\\Local\\py-yfinance",
+      "exists": true,
+      "files": [
+        {
+          "name": "cookies.db",
+          "size_bytes": 8192,
+          "modified": "2026-08-10T20:30:47.660597"
+        },
+        {
+          "name": "tkr-tz.db",
+          "size_bytes": 12288,
+          "modified": "2026-08-15T20:29:28.486593"
+        }
+      ],
+      "tkr_tz_db_size_bytes": 12288,
+      "cookies_db_size_bytes": 8192,
+      "note": "These caches survive deletion of data/cache/. A warm cookies.db means yfinance reuses an existing Yahoo cookie/crumb, reducing initial HTTP requests for subsequent tickers."
+    },
+    "T6_retry_amplification": {
+      "pipeline": {
+        "126": "    # \u00e2\u201d\u20ac\u00e2\u201d\u20ac Step 1: Load financial data (with 429 retry) \u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac\u00e2\u201d\u20ac",
+        "130": "    _RETRY_DELAYS = [5, 15, 30]  # seconds to wait between attempts",
+        "133": "    for _attempt, _wait in enumerate([0] + _RETRY_DELAYS):",
+        "136": "                \"Rate-limited (429) for %s \u00e2\u20ac\u201d retrying in %ds (attempt %d/%d)\",",
+        "137": "                ticker, _wait, _attempt + 1, len(_RETRY_DELAYS) + 1,",
+        "151": "        # Only retry on Yahoo Finance rate-limit (429); other errors are final.",
+        "152": "        _err = load_result.cannot_complete_reason or \"\"",
+        "153": "        if \"429\" not in _err and \"Too Many Requests\" not in _err:",
+        "157": "        result.error = load_result.cannot_complete_reason"
+      },
+      "data_loader": {
+        "21": "  DataLoadResult.cannot_complete_reason is set to a non-empty string.",
+        "40": "# Sentinel string returned as cannot_complete_reason when fetch fails",
+        "53": "    Check cannot_complete_reason FIRST.  If it is non-empty, metrics /",
+        "83": "    cannot_complete_reason: str = \"\"",
+        "88": "        return not self.cannot_complete_reason",
+        "159": "    Check .ok / .cannot_complete_reason before using.",
+        "172": "        result.cannot_complete_reason = (",
+        "180": "    fetch_ok = info.get(\"_fetch_success\", False)",
+        "185": "        result.cannot_complete_reason = (",
+        "195": "        result.cannot_complete_reason = (",
+        "212": "        result.cannot_complete_reason = f\"{CANNOT_COMPLETE}: {msg}\"",
+        "287": "        return r.cannot_complete_reason"
+      },
+      "summary": {
+        "retry_delays_seconds": [
+          0,
+          5,
+          15,
+          30
+        ],
+        "total_attempts": 4,
+        "retry_condition": "'429' or 'Too Many Requests' in load_result.cannot_complete_reason",
+        "cannot_complete_reason_set_when": "info._fetch_success=False OR (no company_name AND no current_price)",
+        "financials_failure_triggers_retry": false,
+        "history_failure_triggers_retry": false,
+        "reason": "data_loader.py only checks raw['info']['_fetch_success'] to set cannot_complete_reason. financials and history failures are NOT checked \u2014 the pipeline proceeds with 0% data completeness, never retrying.",
+        "consequence": "If info succeeds but financials 429s silently, the pipeline proceeds with empty financials, produces a 0%-complete WAIT_INSUFFICIENT_EVIDENCE result, and returns ok=True. The UI shows an analysis with no data."
+      }
+    },
+    "T1_direct_yfinance": {
+      "rows": [
+        {
+          "ticker": "ENB.TO",
+          "endpoint": "info",
+          "timestamp": "2026-08-16T02:42:01.146329+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 3,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/ENB.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/ENB.TO?symbol=ENB.TO&type=trailingPegRatio&period1=1771113600&period2=1786924800"
+          ],
+          "elapsed_s": 1.16,
+          "sample": {
+            "longName": "Enbridge Inc.",
+            "currentPrice": 70.61,
+            "currency": "CAD"
+          }
+        },
+        {
+          "ticker": "ENB.TO",
+          "endpoint": "financials",
+          "timestamp": "2026-08-16T02:42:04.306887+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/ENB.TO?symbol=ENB.TO&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annualNormalizedD..."
+          ],
+          "elapsed_s": 0.34,
+          "rows": 53
+        },
+        {
+          "ticker": "ENB.TO",
+          "endpoint": "balance_sheet",
+          "timestamp": "2026-08-16T02:42:05.647327+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/ENB.TO?symbol=ENB.TO&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumber,annualShar..."
+          ],
+          "elapsed_s": 0.3,
+          "rows": 89
+        },
+        {
+          "ticker": "ENB.TO",
+          "endpoint": "cashflow",
+          "timestamp": "2026-08-16T02:42:06.951676+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/ENB.TO?symbol=ENB.TO&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annualFreeCashFlow..."
+          ],
+          "elapsed_s": 0.34,
+          "rows": 67
+        },
+        {
+          "ticker": "ENB.TO",
+          "endpoint": "history",
+          "timestamp": "2026-08-16T02:42:08.291577+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/v8/finance/chart/ENB.TO"
+          ],
+          "elapsed_s": 0.73,
+          "rows": 1255
+        },
+        {
+          "ticker": "FTS.TO",
+          "endpoint": "info",
+          "timestamp": "2026-08-16T02:42:44.027137+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 3,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=trailingPegRatio&period1=1771113600&period2=1786924800"
+          ],
+          "elapsed_s": 0.44,
+          "sample": {
+            "longName": "Fortis Inc.",
+            "currentPrice": 78.68,
+            "currency": "CAD"
+          }
+        },
+        {
+          "ticker": "FTS.TO",
+          "endpoint": "financials",
+          "timestamp": "2026-08-16T02:42:46.467716+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annualNormalizedD..."
+          ],
+          "elapsed_s": 0.43,
+          "rows": 50
+        },
+        {
+          "ticker": "FTS.TO",
+          "endpoint": "balance_sheet",
+          "timestamp": "2026-08-16T02:42:47.902461+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumber,annualShar..."
+          ],
+          "elapsed_s": 0.36,
+          "rows": 87
+        },
+        {
+          "ticker": "FTS.TO",
+          "endpoint": "cashflow",
+          "timestamp": "2026-08-16T02:42:49.268053+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/FTS.TO?symbol=FTS.TO&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annualFreeCashFlow..."
+          ],
+          "elapsed_s": 0.29,
+          "rows": 57
+        },
+        {
+          "ticker": "FTS.TO",
+          "endpoint": "history",
+          "timestamp": "2026-08-16T02:42:50.559883+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/v8/finance/chart/FTS.TO"
+          ],
+          "elapsed_s": 0.5,
+          "rows": 1255
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "endpoint": "info",
+          "timestamp": "2026-08-16T02:43:26.061790+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 3,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/TATASTEEL.NS",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=trailingPegRatio&period1=1771113600&period2=1786924800"
+          ],
+          "elapsed_s": 0.29,
+          "sample": {
+            "longName": "Tata Steel Limited",
+            "currentPrice": 183.5,
+            "currency": "INR"
+          }
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "endpoint": "financials",
+          "timestamp": "2026-08-16T02:43:28.349088+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annua..."
+          ],
+          "elapsed_s": 0.24,
+          "rows": 53
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "endpoint": "balance_sheet",
+          "timestamp": "2026-08-16T02:43:29.589690+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumbe..."
+          ],
+          "elapsed_s": 0.26,
+          "rows": 89
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "endpoint": "cashflow",
+          "timestamp": "2026-08-16T02:43:30.846501+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/TATASTEEL.NS?symbol=TATASTEEL.NS&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annual..."
+          ],
+          "elapsed_s": 0.34,
+          "rows": 50
+        },
+        {
+          "ticker": "TATASTEEL.NS",
+          "endpoint": "history",
+          "timestamp": "2026-08-16T02:43:32.190161+00:00",
+          "success": true,
+          "error": null,
+          "empty": false,
+          "http_requests": 2,
+          "urls": [
+            "https://query2.finance.yahoo.com/v8/finance/chart/TATASTEEL.NS",
+            "https://query2.finance.yahoo.com/v8/finance/chart/TATASTEEL.NS"
+          ],
+          "elapsed_s": 0.49,
+          "rows": 1239
+        }
+      ],
+      "summary": {
+        "ENB.TO": {
+          "all_succeeded": true,
+          "total_http_requests": 7,
+          "failed_endpoints": [],
+          "errored_endpoints": [],
+          "empty_endpoints": []
+        },
+        "FTS.TO": {
+          "all_succeeded": true,
+          "total_http_requests": 7,
+          "failed_endpoints": [],
+          "errored_endpoints": [],
+          "empty_endpoints": []
+        },
+        "TATASTEEL.NS": {
+          "all_succeeded": true,
+          "total_http_requests": 8,
+          "failed_endpoints": [],
+          "errored_endpoints": [],
+          "empty_endpoints": []
+        }
+      }
+    },
+    "T4_request_count": {
+      "ticker": "AAPL",
+      "endpoints": [
+        {
+          "endpoint": "info",
+          "error": null,
+          "empty": false,
+          "http_requests": 3,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/AAPL",
+            "https://query1.finance.yahoo.com/v7/finance/quote?",
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AAPL?symbol=AAPL&type=trailingPegRatio&period1=1771113600&period2=1786924800"
+          ],
+          "elapsed_s": 0.36
+        },
+        {
+          "endpoint": "financials",
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AAPL?symbol=AAPL&type=annualTaxEffectOfUnusualItems,annualTaxRateForCalcs,annualNormalizedEBITDA,annualNormalizedDilut..."
+          ],
+          "elapsed_s": 0.28
+        },
+        {
+          "endpoint": "balance_sheet",
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AAPL?symbol=AAPL&type=annualTreasurySharesNumber,annualPreferredSharesNumber,annualOrdinarySharesNumber,annualShareIss..."
+          ],
+          "elapsed_s": 0.25
+        },
+        {
+          "endpoint": "cashflow",
+          "error": null,
+          "empty": false,
+          "http_requests": 1,
+          "urls": [
+            "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AAPL?symbol=AAPL&type=annualForeignSales,annualDomesticSales,annualAdjustedGeographySegmentData,annualFreeCashFlow,ann..."
+          ],
+          "elapsed_s": 0.3
+        },
+        {
+          "endpoint": "history_5y",
+          "error": null,
+          "empty": false,
+          "http_requests": 2,
+          "urls": [
+            "https://query2.finance.yahoo.com/v8/finance/chart/AAPL",
+            "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
+          ],
+          "elapsed_s": 0.64
+        }
+      ],
+      "total_http_requests": 8,
+      "pipeline_retry_amplification": 32
+    },
+    "T7_minimum_footprint": [
+      {
+        "ticker": "ENB.TO",
+        "endpoint": "info_only",
+        "timestamp": "2026-08-16T02:43:41.551644+00:00",
+        "success": true,
+        "empty": false,
+        "error": null,
+        "company": "Enbridge Inc.",
+        "http_requests": 2,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/ENB.TO",
+          "https://query1.finance.yahoo.com/v7/finance/quote?"
+        ],
+        "currentPrice": 70.61,
+        "currency": "CAD",
+        "elapsed_s": 0.29
+      },
+      {
+        "ticker": "FTS.TO",
+        "endpoint": "info_only",
+        "timestamp": "2026-08-16T02:44:16.846857+00:00",
+        "success": true,
+        "empty": false,
+        "error": null,
+        "company": "Fortis Inc.",
+        "http_requests": 2,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+          "https://query1.finance.yahoo.com/v7/finance/quote?"
+        ],
+        "currentPrice": 78.68,
+        "currency": "CAD",
+        "elapsed_s": 0.2
+      },
+      {
+        "ticker": "TATASTEEL.NS",
+        "endpoint": "info_only",
+        "timestamp": "2026-08-16T02:44:52.051828+00:00",
+        "success": true,
+        "empty": false,
+        "error": null,
+        "company": "Tata Steel Limited",
+        "http_requests": 2,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/TATASTEEL.NS",
+          "https://query1.finance.yahoo.com/v7/finance/quote?"
+        ],
+        "currentPrice": 183.5,
+        "currency": "INR",
+        "elapsed_s": 0.21
+      }
+    ],
+    "T3_application_path": [
+      {
+        "ticker": "ENB.TO",
+        "timestamp": "2026-08-16T02:44:52.270331+00:00",
+        "load_ok": true,
+        "cannot_complete_reason": null,
+        "company_name": "Enbridge Inc.",
+        "current_price": 70.61,
+        "data_completeness_pct": 100.0,
+        "info_fetch_success": true,
+        "financials_fetch_success": true,
+        "history_fetch_success": true,
+        "http_requests": 3,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/ENB.TO",
+          "https://query1.finance.yahoo.com/v7/finance/quote?",
+          "https://query2.finance.yahoo.com/v8/finance/chart/ENB.TO"
+        ],
+        "elapsed_s": 3.33,
+        "error": null,
+        "info_fetch_error": null,
+        "financials_fetch_error": null,
+        "history_fetch_error": null
+      },
+      {
+        "ticker": "FTS.TO",
+        "timestamp": "2026-08-16T02:45:30.601144+00:00",
+        "load_ok": true,
+        "cannot_complete_reason": null,
+        "company_name": "Fortis Inc.",
+        "current_price": 78.68,
+        "data_completeness_pct": 100.0,
+        "info_fetch_success": true,
+        "financials_fetch_success": true,
+        "history_fetch_success": true,
+        "http_requests": 3,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+          "https://query1.finance.yahoo.com/v7/finance/quote?",
+          "https://query2.finance.yahoo.com/v8/finance/chart/FTS.TO"
+        ],
+        "elapsed_s": 2.85,
+        "error": null,
+        "info_fetch_error": null,
+        "financials_fetch_error": null,
+        "history_fetch_error": null
+      },
+      {
+        "ticker": "TATASTEEL.NS",
+        "timestamp": "2026-08-16T02:46:08.454409+00:00",
+        "load_ok": true,
+        "cannot_complete_reason": null,
+        "company_name": "Tata Steel Limited",
+        "current_price": 183.5,
+        "data_completeness_pct": 100.0,
+        "info_fetch_success": true,
+        "financials_fetch_success": true,
+        "history_fetch_success": true,
+        "http_requests": 3,
+        "urls": [
+          "https://query2.finance.yahoo.com/v10/finance/quoteSummary/TATASTEEL.NS",
+          "https://query1.finance.yahoo.com/v7/finance/quote?",
+          "https://query2.finance.yahoo.com/v8/finance/chart/TATASTEEL.NS"
+        ],
+        "elapsed_s": 2.16,
+        "error": null,
+        "info_fetch_error": null,
+        "financials_fetch_error": null,
+        "history_fetch_error": null
+      }
+    ],
+    "T5_singleton_comparison": {
+      "ENB_first": [
+        {
+          "ticker": "ENB.TO",
+          "order": 1,
+          "info_success": true,
+          "info_error": null,
+          "http_requests": 2,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/ENB.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?"
+          ],
+          "info_empty": false,
+          "company": "Enbridge Inc.",
+          "elapsed_s": 0.29
+        },
+        {
+          "ticker": "FTS.TO",
+          "order": 2,
+          "info_success": true,
+          "info_error": null,
+          "http_requests": 2,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?"
+          ],
+          "info_empty": false,
+          "company": "Fortis Inc.",
+          "elapsed_s": 0.22
+        }
+      ],
+      "FTS_first_after_delay": [
+        {
+          "ticker": "FTS.TO",
+          "order": 1,
+          "info_success": true,
+          "info_error": null,
+          "http_requests": 2,
+          "urls": [
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/FTS.TO",
+            "https://query1.finance.yahoo.com/v7/finance/quote?"
+          ],
+          "info_empty": false,
+          "company": "Fortis Inc.",
+          "elapsed_s": 0.24
+        }
+      ]
+    }
+  },
+  "env": {
+    "python": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+    "yfinance": "1.5.2",
+    "curl_cffi": "0.16.0"
+  },
+  "finished": "2026-08-16T02:46:56.383535+00:00"
+}
