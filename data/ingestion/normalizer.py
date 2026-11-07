@@ -25,11 +25,13 @@ from analytics.financial_quality.financial_metrics_model import (
 )
 from analytics.financial_quality.calculations import (
     annual_growth_rates, growth_volatility, count_negative_growth_years,
-    extract_cagr_from_series, gross_margin, operating_margin, net_margin,
-    fcf_margin, free_cash_flow, fcf_conversion_ratio, capex_as_pct_revenue,
-    debt_to_assets, interest_coverage, fcf_to_debt_ratio, net_debt,
-    dividend_payout_ratio, fcf_payout_ratio, dividend_yield as calc_dividend_yield,
+    extract_cagr_from_series, cagr_period_label, gross_margin, operating_margin,
+    net_margin, fcf_margin, free_cash_flow, fcf_conversion_ratio,
+    capex_as_pct_revenue, debt_to_assets, interest_coverage, fcf_to_debt_ratio,
+    net_debt, dividend_payout_ratio, fcf_payout_ratio,
+    dividend_yield as calc_dividend_yield,
     extract_cagr_from_series as dividend_cagr_from_series,
+    calculate_roic, average_roic,
     pe_ratio, price_to_fcf, ev_ebitda, enterprise_value
 )
 
@@ -91,6 +93,16 @@ CAPEX_FIELDS = [
 DIVIDENDS_PAID_FIELDS = [
     "Dividends Paid", "DividendsPaid",
     "Payment Of Dividends", "Cash Dividends Paid"
+]
+
+# yfinance income statement: tax provision for NOPAT calculation
+TAX_PROVISION_FIELDS = [
+    "Tax Provision", "TaxProvision", "Income Tax Expense", "IncomeTaxExpense"
+]
+
+# yfinance balance sheet: invested capital for ROIC calculation
+INVESTED_CAPITAL_FIELDS = [
+    "Invested Capital", "InvestedCapital", "Capital Employed"
 ]
 
 
@@ -210,9 +222,29 @@ def normalize(
     # --- Dividend (from info — more reliable than cash flow statement) ---
     div = DividendMetrics()
     div.pays_dividend = (raw_info.get("dividendYield") or 0) > 0
-    div.current_yield_pct = (
-        raw_info["dividendYield"] * 100 if raw_info.get("dividendYield") else None
-    )
+    # Fix (Phase 11A-3B): yfinance `dividendYield` is inconsistent — it may be
+    # stored as a decimal (0.0372) OR as a percentage (3.72) depending on the
+    # version of yfinance and the exchange.  `trailingAnnualDividendYield` is
+    # always decimal.  Prefer it; fall back to `dividendYield` only when the
+    # trailing field is absent, applying a defensive cap to catch the
+    # already-multiplied case.
+    _trailing = raw_info.get("trailingAnnualDividendYield")
+    _raw_dy   = raw_info.get("dividendYield")
+    if _trailing is not None:
+        div.current_yield_pct = _trailing * 100
+    elif _raw_dy is not None:
+        _pct = _raw_dy * 100
+        if _pct > 100:
+            # already a percentage — use as-is and flag the anomaly
+            notes.append(
+                f"⚠ dividendYield={_raw_dy} looks like a percentage already "
+                f"(would be {_pct:.1f}%); stored as {_raw_dy:.2f}% — verify source"
+            )
+            div.current_yield_pct = _raw_dy
+        else:
+            div.current_yield_pct = _pct
+    else:
+        div.current_yield_pct = None
     div.annual_dividend_per_share = raw_info.get("dividendRate")
     div.payout_ratio_pct = (
         raw_info["payoutRatio"] * 100 if raw_info.get("payoutRatio") else None
@@ -247,6 +279,9 @@ def normalize(
         rg.growth_volatility = growth_volatility(yoy_rates)
         rg.cagr_3yr = extract_cagr_from_series(revenue_series, 3)
         rg.cagr_5yr = extract_cagr_from_series(revenue_series, 5)
+        # Phase 11A-3A: accurate period labels — never call a 3yr CAGR a 5yr CAGR
+        rg.cagr_3yr_label = cagr_period_label(revenue_series, 3, rg.cagr_3yr)
+        rg.cagr_5yr_label = cagr_period_label(revenue_series, 5, rg.cagr_5yr)
         rg.trend = _trend_from_series(revenue_series)
     m.revenue_growth = rg
 
@@ -387,18 +422,59 @@ def normalize(
 
     m.debt = db
 
-    # --- ROIC (simplified: NOPAT / (Total Assets - Current Liabilities)) ---
-    # yfinance doesn't give invested capital directly, so we approximate
-    # A more accurate calculation requires Phase 3 (Financial Quality Engine)
-    # For now, use ROE from info as a proxy if available
-    roe = raw_info.get("returnOnEquity")
-    if roe is not None:
-        notes.append(
-            f"ROIC approximated from ROE ({roe*100:.1f}%) — accurate ROIC requires Phase 3 engine"
-        )
-    roic_obj = ROICMetrics(
-        calculation_note="Approximate — Phase 3 will compute full ROIC from financial statements"
+    # --- ROIC (Phase 11A-3C: NOPAT / Invested Capital) ---
+    # NOPAT = Operating Income × (1 − effective_tax_rate)
+    # Effective tax rate = Tax Provision / Pre-tax Income (clamped to [0, 1])
+    # Invested Capital sourced from balance sheet "Invested Capital" line.
+    tax_series = _extract_annual_series(income, TAX_PROVISION_FIELDS)
+    pretax_series = _extract_annual_series(
+        income,
+        ["Pretax Income", "PreTaxIncome", "Income Before Tax"]
     )
+    invested_cap_series = _extract_annual_series(balance, INVESTED_CAPITAL_FIELDS)
+
+    annual_roic_vals: Dict[int, float] = {}
+    if op_income_series and tax_series and pretax_series and invested_cap_series:
+        common_years = (
+            set(op_income_series)
+            & set(tax_series)
+            & set(pretax_series)
+            & set(invested_cap_series)
+        )
+        for yr in common_years:
+            ebit    = op_income_series[yr]
+            tax     = tax_series[yr]
+            pretax  = pretax_series[yr]
+            inv_cap = invested_cap_series[yr]
+            if pretax and pretax != 0:
+                tax_rate = max(0.0, min(1.0, tax / pretax))
+            else:
+                tax_rate = 0.25          # statutory fallback
+            nopat = ebit * (1 - tax_rate)
+            roic_val = calculate_roic(nopat, inv_cap)
+            if roic_val is not None:
+                annual_roic_vals[yr] = roic_val
+
+    roic_obj = ROICMetrics(
+        annual_roic=annual_roic_vals,
+        calculation_note="NOPAT / Invested Capital (from balance sheet)",
+    )
+    if annual_roic_vals:
+        sorted_roic_yrs = sorted(annual_roic_vals.keys(), reverse=True)
+        roic_obj.current  = annual_roic_vals[sorted_roic_yrs[0]]
+        roic_obj.avg_3yr  = average_roic(annual_roic_vals, 3)
+        roic_obj.avg_5yr  = average_roic(annual_roic_vals, 5)
+        roic_obj.trend    = _trend_from_series(annual_roic_vals)
+    else:
+        # Fallback: note ROE from info if ROIC data unavailable
+        roe = raw_info.get("returnOnEquity")
+        if roe is not None:
+            roic_obj.calculation_note = (
+                f"Invested Capital data unavailable; ROE={roe*100:.1f}% from info "
+                f"(not a substitute for ROIC)"
+            )
+        else:
+            roic_obj.calculation_note = "Invested Capital data unavailable — ROIC not computed"
     m.roic = roic_obj
 
     # --- Earnings Quality ---

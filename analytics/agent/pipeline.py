@@ -245,4 +245,40 @@ def run_analysis_pipeline(
     result.ok              = True
     result.assessment      = agent.last_assessment
     result.rendered_report = rendered
+
+    # Phase 11A: persist decision JSON for audit trail and regression testing
+    _persist_decision(agent.last_assessment, _date)
+
     return result
+
+
+def _persist_decision(assessment: object, analysis_date: str) -> None:
+    """
+    Write a structured decision JSON to data/output/{TICKER}_{DATE}_decision.json.
+    Non-fatal: logs warnings on failure rather than raising.
+    """
+    import json
+    import pathlib
+
+    if assessment is None:
+        return
+    try:
+        ticker_safe = getattr(assessment, "ticker", "UNKNOWN").replace(".", "_")
+        date_safe   = analysis_date.replace("-", "")
+        out_dir     = pathlib.Path(__file__).resolve().parents[2] / "data" / "output"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path    = out_dir / f"{ticker_safe}_{date_safe}_decision.json"
+
+        payload = {}
+        if hasattr(assessment, "to_dict"):
+            payload = assessment.to_dict()
+        elif hasattr(assessment, "__dict__"):
+            payload = {k: v for k, v in vars(assessment).items()
+                       if not k.startswith("_")}
+
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, default=str)
+
+        log.info("Decision persisted → %s", out_path)
+    except Exception as exc:
+        log.warning("Failed to persist decision JSON: %s", exc)

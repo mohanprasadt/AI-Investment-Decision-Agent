@@ -55,6 +55,10 @@ class RevenueGrowthMetrics:
     consistency_classification: str = ""
     trend: str = ""
     data_years_available: int = 0
+    # Accurate period labels — set by normalizer to reflect actual years used.
+    # Never say "5yr CAGR" when the computation used only 3 years of data.
+    cagr_3yr_label: str = ""   # e.g. "3yr CAGR: -3.7% (2022→2025)"
+    cagr_5yr_label: str = ""   # e.g. "3yr CAGR: -3.7% (2022→2025)  [5yr baseline unavailable]"
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -234,15 +234,17 @@ def _assess_revenue_growth(m: CompanyFinancialMetrics, is_emerging: bool) -> Dim
             data_available=False
         )
 
-    # CAGRs
+    # CAGRs — use accurate period labels (Phase 11A-3A)
     if rg.cagr_5yr is not None:
         result = classify_revenue_growth_cagr(rg.cagr_5yr, 5)
         classification = _standardize(result.classification)
-        evidence.append(f"5yr revenue CAGR: {rg.cagr_5yr:.1f}% ({result.classification})")
+        _lbl = rg.cagr_5yr_label or f"{rg.cagr_5yr:.1f}% 5yr revenue CAGR"
+        evidence.append(f"Revenue {_lbl} ({result.classification})")
     elif rg.cagr_3yr is not None:
         result = classify_revenue_growth_cagr(rg.cagr_3yr, 3)
         classification = _standardize(result.classification)
-        evidence.append(f"3yr revenue CAGR: {rg.cagr_3yr:.1f}% (5yr not available)")
+        _lbl = rg.cagr_3yr_label or f"{rg.cagr_3yr:.1f}% 3yr revenue CAGR"
+        evidence.append(f"Revenue {_lbl}")
     else:
         classification = "N/A"
         evidence.append("Insufficient history for CAGR calculation")
@@ -282,9 +284,13 @@ def _assess_revenue_growth(m: CompanyFinancialMetrics, is_emerging: bool) -> Dim
     if is_emerging and classification in ("Watch", "Concern"):
         flags.append("Emerging company context: lower/volatile growth may be acceptable if trajectory is improving")
 
-    headline = f"{rg.cagr_5yr:.1f}% 5yr CAGR" if rg.cagr_5yr is not None else (
-        f"{rg.cagr_3yr:.1f}% 3yr CAGR" if rg.cagr_3yr is not None else "Insufficient data"
-    )
+    # Phase 11A-3A: use the accurate period label; fall back to bare value if label absent
+    if rg.cagr_5yr is not None:
+        headline = rg.cagr_5yr_label or f"{rg.cagr_5yr:.1f}% 5yr CAGR"
+    elif rg.cagr_3yr is not None:
+        headline = rg.cagr_3yr_label or f"{rg.cagr_3yr:.1f}% 3yr CAGR"
+    else:
+        headline = "Insufficient data"
 
     return DimensionAssessment(
         dimension="Revenue Growth",

@@ -83,13 +83,40 @@ def extract_cagr_from_series(
     """
     Extract CAGR over the specified number of years from a time series.
     Uses the most recent 'years' data points available.
+
+    Returns the CAGR value only.  Use extract_cagr_with_period() when you
+    also need the actual start/end years for accurate labeling.
+    """
+    result = extract_cagr_with_period(time_series, years)
+    return result[0] if result else None
+
+
+def extract_cagr_with_period(
+    time_series: Dict[int, float], years: int
+) -> Optional[Tuple[float, int, int, int]]:
+    """
+    Extract CAGR over the specified number of years from a time series.
+
+    Returns (cagr_value, actual_start_year, actual_end_year, actual_years)
+    or None if the CAGR cannot be computed.
+
+    When the requested baseline year is unavailable, falls back to the earliest
+    available year — but always reports the actual period used rather than
+    labeling it as the originally requested period.
+
+    Examples
+    --------
+    Requested 5yr but only 2022-2025 available:
+        → returns (value, 2022, 2025, 3)   — caller must label as "3yr CAGR"
+
+    Requested 5yr and 2020-2025 all available:
+        → returns (value, 2020, 2025, 5)   — correctly labeled "5yr CAGR"
     """
     if len(time_series) < 2:
         return None
     sorted_years = sorted(time_series.keys())
-    # Use last `years` entries if available
     if len(sorted_years) < years + 1:
-        # Use whatever we have
+        # Requested baseline not available — use earliest data point
         start_yr = sorted_years[0]
         end_yr = sorted_years[-1]
         actual_years = end_yr - start_yr
@@ -98,7 +125,6 @@ def extract_cagr_from_series(
         start_yr = sorted_years[-1] - years
         actual_years = years
         if start_yr not in time_series:
-            # Find closest available year
             available = [y for y in sorted_years if y <= start_yr]
             if not available:
                 return None
@@ -107,7 +133,46 @@ def extract_cagr_from_series(
 
     if actual_years <= 0:
         return None
-    return cagr(time_series[start_yr], time_series[end_yr], actual_years)
+    value = cagr(time_series[start_yr], time_series[end_yr], actual_years)
+    if value is None:
+        return None
+    return (value, start_yr, end_yr, actual_years)
+
+
+def cagr_period_label(
+    time_series: Dict[int, float],
+    requested_years: int,
+    value: Optional[float],
+) -> str:
+    """
+    Build a human-readable CAGR label that accurately reflects the data
+    period actually used — never calls a shorter-period CAGR by the
+    requested name.
+
+    Examples
+    --------
+    Requested 5yr, only 2022-2025 data:
+        → "3yr CAGR: -3.7% (2022→2025)  [5yr baseline unavailable]"
+
+    Requested 5yr, 2020-2025 data available:
+        → "5yr CAGR: +16.4% (2020→2025)"
+
+    Value is None:
+        → "5yr CAGR: unavailable (insufficient data)"
+    """
+    if value is None:
+        return f"{requested_years}yr CAGR: unavailable (insufficient data)"
+
+    result = extract_cagr_with_period(time_series, requested_years)
+    if result is None:
+        return f"{requested_years}yr CAGR: unavailable (insufficient data)"
+
+    _, start_yr, end_yr, actual_years = result
+    sign = "+" if value >= 0 else ""
+    base = f"{actual_years}yr CAGR: {sign}{value:.1f}% ({start_yr}→{end_yr})"
+    if actual_years < requested_years:
+        base += f"  [{requested_years}yr baseline unavailable]"
+    return base
 
 
 # ---------------------------------------------------------------------------

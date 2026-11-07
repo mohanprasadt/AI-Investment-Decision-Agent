@@ -1323,8 +1323,18 @@ def _answer_growth_attractiveness(d: InvestmentDecisionAssessment) -> str:
 
 
 def _answer_why(d: InvestmentDecisionAssessment) -> str:
+    # Phase 11A-2: surface gate-by-gate Decision Trace first, then narrative summary
+    from analytics.decision.decision_trace import build_decision_trace, render_decision_trace
+    try:
+        trace = build_decision_trace(d)
+        trace_text = render_decision_trace(trace)
+    except Exception:
+        trace_text = "[Decision trace unavailable]"
+
     parts = [
-        f"Why {d.action.value} for {d.company_name} ({d.ticker}):\n",
+        trace_text,
+        "\nNARRATIVE SUMMARY",
+        "─" * 40,
         d.executive_conclusion,
         f"\nBusiness quality ({d.business_quality_label}): {d.business_quality_conclusion}",
         f"\nValuation ({d.valuation_attractiveness_label}): {d.valuation_conclusion}",
