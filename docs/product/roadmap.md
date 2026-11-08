@@ -1,5 +1,7 @@
 # Project Roadmap
 
+> **Status pointer (2026-10-11):** This page is the phase history only. Feature status, priorities and the forward plan live in the [Product Feature Inventory and Roadmap](product-feature-inventory-and-roadmap.md). Phase 11A/11B work exists in the working tree and is not described below.
+
 > **Last updated:** Phase 10.6  
 > **Note:** Early phase history (Phases 1–8) is [RECONSTRUCTED] from repository evidence — module docstrings, file names, test names, validation reports, and README content. Phase 9+ history is well-evidenced.
 

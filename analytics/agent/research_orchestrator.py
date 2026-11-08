@@ -180,7 +180,7 @@ class ResearchOrchestrator:
 
         bull_bear_raw = self._executor("bull_bear_analysis", context)
         if bull_bear_raw:
-            assessment.bull_bear = self._parse_bull_bear(bull_bear_raw)
+            assessment.bull_bear = self._parse_bull_bear(bull_bear_raw, context)
         # else: bull_bear remains None
 
         # ── Completeness and gaps ───────────────────────────────────────────
@@ -244,7 +244,43 @@ class ResearchOrchestrator:
             rg = getattr(metrics, "revenue_growth", None)
             if rg:
                 ctx["revenue_cagr_3yr"] = getattr(rg, "cagr_3yr", None)
-                ctx["revenue_cagr_5yr"] = getattr(rg, "cagr_5yr", None)
+
+                # Phase 11B P0-2 corrective (root-cause fix):
+                # The normalizer populates cagr_5yr via extract_cagr_from_series()
+                # which falls back to the earliest available year when the true 5yr
+                # baseline is absent.  For CNQ.TO with 2022-2025 data, this means
+                # cagr_5yr = -3.75 (a 3yr CAGR) is returned instead of None.
+                # When ctx["revenue_cagr_5yr"] is set to that fallback value,
+                # _format_context() emits "revenue_cagr_5yr: -3.75" (not UNAVAILABLE),
+                # _5yr_missing evaluates to False, and the post-generation validator
+                # never fires — so the LLM's fabricated "5-year CAGR" claim passes
+                # through unchecked.
+                #
+                # K1 fix: use the structured data_years_available field as the
+                # authoritative signal — it is set by the normalizer to len(revenue_series)
+                # and accurately reflects how many years of historical data are available.
+                # The display label substring is retained as a defense-in-depth check
+                # (belt-and-suspenders) but is NOT the primary business rule.
+                # This eliminates the silent failure mode where cagr_5yr_label is ""
+                # (its dataclass default) while data_years_available < 5.
+                _cagr_5yr_val   = getattr(rg, "cagr_5yr", None)
+                _data_years     = getattr(rg, "data_years_available", 0)
+                _cagr_5yr_label = getattr(rg, "cagr_5yr_label", "") or ""
+                # Genuine 5yr CAGR: value exists AND at least 5 data-years available
+                # AND label does not explicitly override this (defense-in-depth).
+                _5yr_genuine    = (
+                    _cagr_5yr_val is not None
+                    and _data_years >= 5
+                    and "[5yr baseline unavailable]" not in _cagr_5yr_label
+                )
+                ctx["revenue_cagr_5yr"] = _cagr_5yr_val if _5yr_genuine else None
+
+                # Provide accurate period label so the LLM can cite the correct period.
+                # e.g. "3yr CAGR: -3.7% (2022→2025)" helps it say "3-year" not "5-year".
+                _3yr_label = getattr(rg, "cagr_3yr_label", "") or ""
+                if _3yr_label:
+                    ctx["revenue_cagr_3yr_label"] = _3yr_label
+
                 ctx["annual_revenues"] = getattr(rg, "annual_revenues", {})
 
             mg = getattr(metrics, "margins", None)
@@ -398,14 +434,141 @@ class ResearchOrchestrator:
             confidence=_safe_enum(Confidence, raw.get("confidence", "Medium"), Confidence.MEDIUM),
         )
 
-    def _parse_bull_bear(self, raw: dict):
+    def _parse_bull_bear(self, raw: dict, context: dict | None = None):
         from analytics.business_research.research_models import BullBearAssessment
+        import re as _re_pb
+        import logging as _log_pb
+
+        # Phase 11B: thesis_breakers may be array-of-strings (old) or
+        # array-of-objects (new schema with likelihood + evidence).
+        # We populate both fields for backward compat:
+        #   thesis_breakers        — List[str]  (condition text only)
+        #   thesis_breaker_details — List[dict] (structured; empty if old format)
+        raw_breakers = raw.get("thesis_breakers", [])
+        plain: list = []
+        details: list = []
+        _valid_likelihoods = {"LOW", "MEDIUM", "HIGH", "UNKNOWN"}
+        for entry in raw_breakers:
+            if isinstance(entry, dict):
+                condition = entry.get("condition", "")
+                likelihood = str(entry.get("likelihood", "UNKNOWN")).upper()
+                if likelihood not in _valid_likelihoods:
+                    likelihood = "UNKNOWN"
+                details.append({
+                    "condition": condition,
+                    "likelihood": likelihood,
+                    "evidence": entry.get("evidence", []),
+                    "likelihood_rationale": entry.get("likelihood_rationale", ""),
+                })
+                plain.append(condition)
+            else:
+                # Legacy plain-string format — no likelihood evidence available
+                plain.append(str(entry))
+                # No detail added; gate5 will fall back to MEDIUM for plain strings
+
+        # Phase 11B P0-2 (corrective): post-generation evidence-boundary validation.
+        #
+        # Purpose: detect and annotate claims that reference metrics the current run
+        # did NOT provide in its structured context. The LLM must not silently use
+        # training knowledge to reconstruct UNAVAILABLE metrics.
+        #
+        # This does NOT reject or discard output — it annotates violating strings so
+        # analysts can identify fabricated claims.  Violations are also logged at WARNING.
+        #
+        # Corrective changes vs. original P0-2:
+        #   1. Regex now covers plural "years" (original used `year\b` which missed
+        #      "5 years", "over 5 years", "Revenue CAGR over 5 years").
+        #   2. Field coverage expanded: now also scans likelihood_rationale and
+        #      confirmation_bias_check (original only scanned bear/bull narrative + evidence).
+        #   3. Added carbon-pricing pattern: $/tonne claims not in structured context.
+        _ctx = context or {}
+        _ticker = _ctx.get("ticker", "UNKNOWN")
+
+        # ── Pattern 1: 5-year CAGR (fires only when revenue_cagr_5yr was UNAVAILABLE) ──
+        _5yr_missing = _ctx.get("revenue_cagr_5yr") is None
+        _5yr_re = _re_pb.compile(
+            # Singular AND plural years; all common phrasings found in LLM output.
+            r"\b(5[\s-]?years?|5yr|five[\s-]?years?)\b.*?CAGR"   # "5-year CAGR", "5 years CAGR"
+            r"|CAGR.*?\b(5[\s-]?years?|5yr|five[\s-]?years?)\b"   # "CAGR over 5 years"
+            r"|over\s+(?:the\s+)?(?:past\s+)?5\s+years?"          # "over 5 years", "over the past 5 years"
+            r"|both\s+3[\s-]?and\s+5[\s-]?year",                  # "both 3- and 5-year periods"
+            _re_pb.IGNORECASE,
+        )
+
+        # ── Pattern 2: carbon-pricing external fact (always flagged — never in structured context) ──
+        # Carbon pricing data ($/tonne, $/t) is never provided in the financial context dict.
+        # If it appears in evidence strings it is an external fact, not context evidence.
+        _carbon_re = _re_pb.compile(
+            r"\$\s*\d[\d,.]*/\s*(?:tonne|ton)\b"                  # "$170/tonne", "$20/t"
+            r"|\bcarbon\s+(?:tax|price|levy|cost)\s.*?\$\s*\d"     # "carbon tax of $170"
+            r"|\$\s*\d[\d,.]*\s+per\s+(?:tonne|ton)\b",           # "$170 per tonne"
+            _re_pb.IGNORECASE,
+        )
+
+        def _flag(text: str, field: str, reason: str, label: str) -> str:
+            """Annotate text with a DATA-BOUNDARY-VIOLATION prefix and log a warning."""
+            if not text:
+                return text
+            _log_pb.warning(
+                "[Phase11B-P0-2] DATA-BOUNDARY-VIOLATION in field '%s' (%s). "
+                "Ticker: %s. Snippet: %.120s",
+                field, reason, _ticker, text[:120],
+            )
+            return f"[DATA-BOUNDARY-VIOLATION: {label}] {text}"
+
+        def _scan_5yr(text: str, field: str) -> str:
+            if _5yr_missing and text and _5yr_re.search(text):
+                return _flag(text, field, "5yr CAGR not in context", "5yr CAGR not in context")
+            return text
+
+        def _scan_carbon(text: str, field: str) -> str:
+            """Carbon pricing is never in structured context — always flag if found in evidence."""
+            if text and _carbon_re.search(text):
+                return _flag(text, field, "carbon price not in structured context",
+                             "external carbon-pricing claim not in structured context")
+            return text
+
+        # Apply scans to narrative fields (5yr CAGR only — carbon is evidence-level claim)
+        bear_narrative = _scan_5yr(raw.get("bear_case_narrative", ""),  "bear_case_narrative")
+        bull_narrative = _scan_5yr(raw.get("bull_case_narrative", ""),  "bull_case_narrative")
+        confirm_bias   = _scan_5yr(raw.get("confirmation_bias_check", ""), "confirmation_bias_check")
+        devils_note    = _scan_5yr(raw.get("devils_advocate_research_note", ""), "devils_advocate_research_note")
+
+        # Apply both scans to per-breaker evidence and rationale fields.
+        # P0-2 corrective: for evidence[], SEGREGATE violating strings rather than
+        # annotating them in-place.  An annotated string that stays in evidence[]
+        # is still displayed and treated as trusted evidence downstream (Gate 5,
+        # renderer, Decision Trace).  Instead:
+        #   - clean strings stay in evidence[]   → trusted, shown in Gate 5 render
+        #   - violating strings go to unsupported_evidence[]  → audit record only
+        # ThesisBreaker.evidence (built by evaluate_gate5) only receives clean_ev.
+        for d in details:
+            clean_ev: list = []
+            flagged_ev: list = []
+            for ev in d.get("evidence", []):
+                scanned = _scan_carbon(_scan_5yr(ev, "evidence"), "evidence")
+                if scanned.startswith("[DATA-BOUNDARY-VIOLATION"):
+                    # Keep the annotated form for audit, but NOT in trusted evidence
+                    flagged_ev.append(scanned)
+                else:
+                    clean_ev.append(ev)   # original clean string
+            d["evidence"] = clean_ev
+            if flagged_ev:
+                # Auditable record of suppressed claims — not passed to ThesisBreaker
+                d["unsupported_evidence"] = flagged_ev
+
+            # likelihood_rationale — annotation-in-place is acceptable here since
+            # this field is display-only (not fed into evidence arrays or n_bear).
+            rat = d.get("likelihood_rationale", "")
+            d["likelihood_rationale"] = _scan_5yr(rat, "likelihood_rationale")
+
         return BullBearAssessment(
             bull_case_title=raw.get("bull_case_title", raw.get("bull_case_headline", "")),
-            bull_case_narrative=raw.get("bull_case_narrative", ""),
+            bull_case_narrative=bull_narrative,
             bear_case_title=raw.get("bear_case_title", raw.get("bear_case_headline", "")),
-            bear_case_narrative=raw.get("bear_case_narrative", ""),
-            thesis_breakers=raw.get("thesis_breakers", []),
-            devils_advocate_research_note=raw.get("devils_advocate_research_note", ""),
-            confirmation_bias_check=raw.get("confirmation_bias_check", ""),
+            bear_case_narrative=bear_narrative,
+            thesis_breakers=plain,
+            thesis_breaker_details=details,
+            devils_advocate_research_note=devils_note,
+            confirmation_bias_check=confirm_bias,
         )

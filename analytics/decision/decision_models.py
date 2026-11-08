@@ -103,15 +103,73 @@ class ThesisBreaker:
       - The condition
       - How to monitor for early warning
       - What action to take if triggered
+
+    Phase 11B: likelihood now accepts UNKNOWN when available evidence is
+    insufficient to assign LOW, MEDIUM, or HIGH defensibly.
+    UNKNOWN ≠ MEDIUM — it means the assessment could not be made.
+    For Gate 5 severity, UNKNOWN is treated conservatively as MEDIUM.
     """
     condition: str                    # "What would break the thesis?"
-    likelihood: str = "LOW"          # LOW | MEDIUM | HIGH
+    likelihood: str = "LOW"          # LOW | MEDIUM | HIGH | UNKNOWN
     impact: str = "SEVERE"           # MODERATE | SEVERE | FATAL
     monitoring_indicator: str = ""   # "Watch for X in quarterly filings"
     trigger_action: str = ""         # "Would prompt EXIT / REDUCE review"
+    # Phase 11B additions — populated by LLM-backed research:
+    evidence: List[str] = field(default_factory=list)
+    # Specific quantitative/operational facts supporting the likelihood.
+    # e.g. ["Payout ratio 43%", "0 cuts in 10yr", "CAD 8.3B FCF covers 3.4x"]
+    likelihood_rationale: str = ""
+    # One-line explanation: why this level vs alternatives.
+    # For UNKNOWN: what evidence is missing.
+    # e.g. "UNKNOWN — no credit-rating outlook or agency evidence in current context"
+
+    # Phase 11B K1: evidence-boundary audit trail.
+    # Strings from the LLM's research that referenced data outside the allowed boundary
+    # (e.g. 5yr CAGR when only 3yr data was available, carbon prices).
+    # Preserved for audit; never promoted to decision-eligible evidence.
+    # Empty list for all legacy breakers (backward-compatible default).
+    unsupported_evidence: List[str] = field(default_factory=list)
+
+    # Phase 11B P0-1: evidence-separation flag.
+    # True  → this item is a generic monitoring condition (moat erosion, valuation
+    #          assumption break) that did NOT enter the Gate 5 severity calculation.
+    #          It is useful for ongoing monitoring but is NOT a severity-contributing
+    #          thesis breaker for the current assessment.
+    # False → this item came from the LLM bull/bear analysis or structural risk
+    #          assessment and DID contribute to the Gate 5 n_high / n_medium_equiv
+    #          severity count.  (Default for all existing breakers.)
+    is_monitoring_only: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+# Phase 11B: scenario data model
+@dataclass
+class BreakerOverride:
+    """
+    User-supplied likelihood override for one thesis breaker in a what-if scenario.
+    Never mutates the system baseline.
+    """
+    condition: str              # matches ThesisBreaker.condition for lookup
+    baseline_likelihood: str   # system-assigned (LOW | MEDIUM | HIGH | UNKNOWN)
+    user_likelihood: str        # user's scenario assumption (LOW | MEDIUM | HIGH)
+
+
+@dataclass
+class ScenarioResult:
+    """
+    Output of scenario_engine.run_scenario().
+    Baseline values are always read from the original assessment — never mutated.
+    """
+    overrides: List[BreakerOverride] = field(default_factory=list)
+    baseline_adversarial_risk: str = ""
+    scenario_adversarial_risk: str = ""
+    baseline_action: str = ""
+    scenario_action: str = ""
+    decision_changed: bool = False
+    n_overrides: int = 0
+    scenario_note: str = ""  # human-readable summary of what changed
 
 
 @dataclass
@@ -126,6 +184,18 @@ class GateResult:
     forced_action: Optional[str] = None  # If set, terminates evaluation early
     quality_tier: Optional[str] = None   # Gate 2 output
     adversarial_risk: Optional[str] = None  # Gate 5 output
+    # K1 follow-up: structured bear-point count from Gate 5.
+    # Set by evaluate_gate5() so scenario analysis never needs to parse summary text.
+    #
+    # None  → field absent / legacy record predating this field.
+    #         _get_bear_count() falls back to summary-string parsing.
+    # int   → explicitly set by evaluate_gate5(), including zero (meaning
+    #         "assessed and found no bear points").  _get_bear_count() uses
+    #         this value directly and does NOT parse the summary string.
+    #
+    # This sentinel distinction means "structured 0 (zero bear points, confirmed)"
+    # and "legacy default (not set)" are unambiguous.
+    n_bear: Optional[int] = None
     confidence: str = "MEDIUM"
     summary: str = ""
     supporting_evidence: List[str] = field(default_factory=list)
@@ -233,6 +303,12 @@ class InvestmentDecisionAssessment:
     # --- Data freshness (Phase 7.5) ---
     data_freshness: Optional[dict] = None  # DataFreshnessAssessment.to_dict()
     data_freshness_cap_applied: bool = False  # True if confidence was capped by staleness
+
+    # --- Valuation zone (Phase 11B) ---
+    # The AccumulationZoneLabel that drove action selection in the synthesizer.
+    # Stored here so the scenario engine can re-run action selection without
+    # re-running the full pipeline.  Empty string when not yet set.
+    valuation_zone: str = ""   # e.g. "ACCUMULATE" | "START_SMALL" | "WATCH" | "WAIT"
 
     # --- Price-data suppression (Phase 7.8) ---
     # When the current market price is STALE or UNKNOWN, transactional purchase/reduction
@@ -384,6 +460,8 @@ class InvestmentDecisionAssessment:
             # FCF annual chain (Phase 9.6)
             "fcf_annual_breakdown": self.fcf_annual_breakdown,
             "fcf_shares_outstanding": self.fcf_shares_outstanding,
+            # Valuation zone (Phase 11B)
+            "valuation_zone": self.valuation_zone,
         }
         return d
 

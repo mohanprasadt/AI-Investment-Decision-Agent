@@ -161,7 +161,23 @@ _STEP_SCHEMAS: Dict[str, dict] = {
             "bull_case_narrative": "string — narrative paragraph for the bull case",
             "bear_case_title": "string — short title for the bear thesis",
             "bear_case_narrative": "string — narrative paragraph for the bear case (mandatory)",
-            "thesis_breakers": "array of strings — conditions that would make this uninvestable",
+            "thesis_breakers": (
+                "array of objects — each with: "
+                "condition (string — what would break the thesis), "
+                "likelihood (one of: LOW | MEDIUM | HIGH | UNKNOWN — see rules below), "
+                "evidence (array of strings — specific quantitative facts from the provided "
+                "financial context that support this likelihood, e.g. payout ratio, FCF, "
+                "credit metrics), "
+                "likelihood_rationale (string — one sentence: why this level vs alternatives; "
+                "for UNKNOWN: what specific evidence is missing). "
+                "LIKELIHOOD RULES: "
+                "Assign LOW, MEDIUM, or HIGH ONLY when the available financial/operational "
+                "data in this context supports that assessment. "
+                "Assign UNKNOWN when the available evidence is insufficient to make a "
+                "defensible assessment — for example, when credit-rating data, regulatory "
+                "filings, or other required evidence are not present in the provided context. "
+                "Do NOT default to MEDIUM because evidence is missing — that is UNKNOWN."
+            ),
             "devils_advocate_research_note": "string — what evidence was found AGAINST the thesis?",
             "confirmation_bias_check": "string — what would disprove the thesis?",
         },
@@ -222,9 +238,17 @@ def _format_context(step_name: str, context: Dict[str, Any]) -> str:
         f"Company: {company_name}",
         f"Analysis date: {analysis_date}",
     ]
+    # Phase 11B P0-2: metrics that must always be explicitly labelled — even when absent —
+    # so the LLM cannot silently reconstruct them from training knowledge.
+    # "always_report" keys are emitted as "UNAVAILABLE — <reason>" when None; all others
+    # are omitted when None (unchanged behaviour).
+    _ALWAYS_REPORT = {
+        "revenue_cagr_5yr": "5-year baseline data not available in provided context",
+        "roic_5yr_avg":     "5-year ROIC average not available in provided context",
+    }
     for key in [
         "currency", "current_price", "market_cap", "pe_ratio", "ev_ebitda",
-        "revenue_cagr_3yr", "revenue_cagr_5yr", "annual_revenues",
+        "revenue_cagr_3yr", "revenue_cagr_3yr_label", "revenue_cagr_5yr", "annual_revenues",
         "gross_margin", "operating_margin", "net_margin",
         "fcf_current", "annual_fcf",
         "total_debt", "net_debt", "interest_coverage",
@@ -233,12 +257,28 @@ def _format_context(step_name: str, context: Dict[str, Any]) -> str:
         val = context.get(key)
         if val is not None:
             quant_lines.append(f"{key}: {val}")
+        elif key in _ALWAYS_REPORT:
+            quant_lines.append(f"{key}: UNAVAILABLE — {_ALWAYS_REPORT[key]}")
 
     # Schema block
     field_lines = "\n".join(
         f'  "{k}": {v}' for k, v in schema_fields.items()
     )
     required_str = ", ".join(f'"{r}"' for r in required) if required else "(none)"
+
+    # Phase 11B P0-2: evidence-boundary instruction for bull_bear_analysis step.
+    # This step is the source of CAGR fabrication: the LLM uses training knowledge
+    # to fill UNAVAILABLE metrics.  The instruction below explicitly forbids this.
+    _extra_reminders = ""
+    if step_name == "bull_bear_analysis":
+        _extra_reminders = (
+            "- EVIDENCE BOUNDARY: You MUST NOT reference or reconstruct any metric "
+            "that is labelled UNAVAILABLE in the Company Financial Context above. "
+            "If revenue_cagr_5yr is UNAVAILABLE, do NOT state a 5-year CAGR figure "
+            "in any narrative or evidence field — not even if you believe you know the "
+            "value from training data.  Use only the metrics explicitly provided above. "
+            "If a metric is missing, note the gap explicitly rather than filling it.\n"
+        )
 
     return (
         f"## Research Step: {step_name}\n\n"
@@ -255,6 +295,7 @@ def _format_context(step_name: str, context: Dict[str, Any]) -> str:
         f"- Do not make investment conclusions (no BUY/SELL/HOLD).\n"
         f"- Leave fields empty rather than inventing content.\n"
         f"- Cite sources; flag gaps in research_gaps where applicable.\n"
+        + _extra_reminders
     )
 
 

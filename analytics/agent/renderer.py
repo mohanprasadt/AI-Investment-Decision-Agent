@@ -10,8 +10,120 @@ Architecture boundary:
   It does NOT perform further analysis or reasoning.
 """
 
+import re as _re
 from typing import Optional
 from analytics.decision.decision_models import InvestmentDecisionAssessment, DecisionAction
+
+
+# ---------------------------------------------------------------------------
+# Constants — breaker-matching helpers (D1 / D2, Phase 11B corrective fix)
+# ---------------------------------------------------------------------------
+
+# Short common words that are len >= 3 but carry no domain meaning in a
+# thesis-breaker condition.  Words in this set are excluded from content-word
+# matching so that, e.g., "why", "the", "and" don't pollute the score, while
+# domain-specific 3-char terms such as "oil", "wti", "bbl", "low", "gas" remain
+# eligible participants.
+_BREAKER_STOP_WORDS: frozenset = frozenset({
+    # 3-letter function words
+    "the", "and", "for", "but", "not", "are", "was", "its", "has", "had",
+    "did", "yet", "nor", "all", "any", "few", "can", "may", "let", "got",
+    "get", "his", "her", "him", "who", "how", "our", "own", "via", "two",
+    "why", "too", "ago",
+    # 4–6 letter function / filler words
+    "that", "this", "with", "from", "they", "have", "been", "were", "what",
+    "will", "when", "then", "than", "them", "each", "into", "over", "just",
+    "also", "more", "most", "some", "such", "even", "only", "very", "much",
+    "well", "both", "here", "does", "your", "about", "there", "these",
+    "those", "their", "which", "whose", "would", "could", "should",
+})
+
+# Matches Gate 5 references — used to route "Why is Gate 5 SEVERE/HIGH/…?"
+# to a focused Gate 5 explanation rather than the generic "why" → full trace.
+_GATE5_RE = _re.compile(r"\bgate[\s\-]*5\b|\bgate\s+five\b", _re.IGNORECASE)
+
+# Likelihood token set for D1 guard (all four Phase 11B states, lowercase)
+_LIKELIHOOD_TOKENS = frozenset({"low", "medium", "high", "unknown"})
+
+# Whole-word matchers (substring tests misrouted "below", "higher", "highlight", ...)
+_WHY_WORD_RE = _re.compile(r"\bwhy\b")
+_LIKELIHOOD_WORD_RE = _re.compile(
+    r"\b(?:" + "|".join(sorted(_LIKELIHOOD_TOKENS)) + r")\b"
+)
+# Vocabulary that marks a question as being about breaker likelihood itself.
+_BREAKER_CONTEXT_RE = _re.compile(
+    r"\b(?:breakers?|likelihoods?|thesis|rated|rating)\b"
+)
+
+
+def _stem_word(w: str) -> str:
+    """Minimal plural folding so 'months'/'month', 'prices'/'price' still match."""
+    return w[:-1] if len(w) > 3 and w.endswith("s") else w
+
+
+def _word_set(text: str) -> set:
+    """Lower-cased, punctuation-stripped, plural-folded whole-word set."""
+    return {_stem_word(w) for w in _re.findall(r"\w+", text.lower())}
+
+
+def _breaker_overlap_score(q_words: set, condition: str) -> int:
+    """Count whole-word content tokens of a stored condition present in the question."""
+    raw = _re.sub(r"[^\w\s]", " ", condition.lower()).split()
+    content = {_stem_word(w) for w in raw if len(w) >= 3 and w not in _BREAKER_STOP_WORDS}
+    return sum(1 for w in content if w in q_words)
+
+
+def _is_breaker_likelihood_question(q: str, d: InvestmentDecisionAssessment) -> bool:
+    """
+    "why" + a whole-word likelihood token, AND the question is demonstrably about a
+    stored thesis breaker: breaker/likelihood vocabulary, or >= 2 whole content words
+    shared with a stored breaker condition.  Everything else falls through.
+    """
+    if not (_WHY_WORD_RE.search(q) and _LIKELIHOOD_WORD_RE.search(q)):
+        return False
+    if _BREAKER_CONTEXT_RE.search(q):
+        return True
+    q_words = _word_set(q)
+    return any(
+        _breaker_overlap_score(q_words, getattr(tb, "condition", str(tb))) >= 2
+        for tb in (d.thesis_breakers or [])
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 11B P0-1: breaker-partition helpers
+# ---------------------------------------------------------------------------
+
+def _severity_breakers(thesis_breakers) -> list:
+    """Return only the severity-contributing breakers (is_monitoring_only=False)."""
+    return [b for b in (thesis_breakers or [])
+            if not getattr(b, "is_monitoring_only", False)]
+
+
+def _monitoring_breakers(thesis_breakers) -> list:
+    """Return only the monitoring-only indicators (is_monitoring_only=True)."""
+    return [b for b in (thesis_breakers or [])
+            if getattr(b, "is_monitoring_only", False)]
+
+
+def _md_safe(text: str) -> str:
+    """Escape < and > in text for Streamlit markdown rendering.
+
+    Applied at render time only — does NOT alter the stored condition string.
+    Prevents Streamlit from treating commodity-price threshold expressions such as
+    "Brent crude <$40/bbl" as HTML tags, which would produce malformed output like
+    "<40/bblornaturalgassustained<2 USD/MMBtu".
+    """
+    return text.replace("<", r"\<").replace(">", r"\>")
+
+
+def _gate5_risk(d: "InvestmentDecisionAssessment") -> str:
+    """Extract Gate 5 adversarial risk level from gate_results."""
+    g5 = next(
+        (gr for gr in (d.gate_results or []) if getattr(gr, "gate_number", None) == 5),
+        None,
+    )
+    return getattr(g5, "adversarial_risk", "UNKNOWN") if g5 else "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
@@ -119,15 +231,38 @@ def render_assessment(
     lines.append(f"\n  Biggest reason NOT to invest:")
     lines.append(f"    {d.biggest_reason_not_to_invest}")
 
-    # Thesis breakers
+    # Thesis breakers — Phase 11B P0-1: separate severity-contributing from monitoring-only
+    _sev_breakers = _severity_breakers(d.thesis_breakers)
+    _mon_breakers = _monitoring_breakers(d.thesis_breakers)
     if d.thesis_breakers:
         lines.append(f"\n{'─' * 64}")
-        lines.append(f"THESIS BREAKERS  ({len(d.thesis_breakers)})")
+        lines.append(f"GATE 5 — ADVERSARIAL RISK: {_gate5_risk(d)}")
         lines.append(f"{'─' * 64}")
-        for tb in d.thesis_breakers[:5]:
-            likelihood = getattr(tb, "likelihood", "?")
-            condition  = getattr(tb, "condition", str(tb))
-            lines.append(f"  [{likelihood}] {condition}")
+        if _sev_breakers:
+            lines.append(f"  Severity-contributing thesis breakers ({len(_sev_breakers)}):")
+            for tb in _sev_breakers:
+                likelihood  = getattr(tb, "likelihood", "?")
+                condition   = getattr(tb, "condition", str(tb))
+                rationale   = getattr(tb, "likelihood_rationale", "")
+                evidence    = getattr(tb, "evidence", [])
+                lines.append(f"    [{likelihood}] {_md_safe(condition)}")
+                if rationale:
+                    lines.append(f"      Rationale: {rationale}")
+                for ev in evidence[:2]:
+                    lines.append(f"      — {ev}")
+        else:
+            lines.append("  No severity-contributing thesis breakers.")
+        if _mon_breakers:
+            lines.append(f"")
+            lines.append(f"  Monitoring indicators ({len(_mon_breakers)}):")
+            lines.append(f"  (These did NOT affect the current Gate 5 severity assessment.)")
+            for tb in _mon_breakers:
+                likelihood = getattr(tb, "likelihood", "?")
+                condition  = getattr(tb, "condition", str(tb))
+                monitor    = getattr(tb, "monitoring_indicator", "")
+                lines.append(f"    [{likelihood}] {_md_safe(condition)}")
+                if monitor:
+                    lines.append(f"      Monitor: {monitor}")
 
     # What would change the conclusion
     if d.what_would_change_conclusion:
@@ -172,6 +307,29 @@ def render_followup(question: str, d: InvestmentDecisionAssessment) -> str:
       It does NOT create a new L3 conclusion that could conflict with d.action.
     """
     q = question.lower()
+
+    # --- Breaker-specific named question (checked FIRST — most specific match) ---
+    # Must precede all generic keyword handlers so that a question containing
+    # a breaker condition plus incidental words like "why" or "risk" is answered
+    # with focused single-breaker detail, not the full Decision Trace or all-breaker list.
+    _specific = _answer_breaker_specific(question, d)
+    if _specific is not None:
+        return _specific
+
+    # --- Gate 5 explanation request (D1 — checked before "why + likelihood" guard) ---
+    # "Why is Gate 5 SEVERE?" and "Why is Gate 5 HIGH?" must route here, NOT to the
+    # breaker-likelihood path, because Gate 5's severity uses a different scale
+    # (SEVERE/HIGH/MODERATE/LOW) from the breaker likelihood (HIGH/MEDIUM/LOW/UNKNOWN).
+    if _GATE5_RE.search(question):
+        return _answer_gate5_explanation(d)
+
+    # --- "Why is X MEDIUM/HIGH/LOW/UNKNOWN?" — breaker-likelihood intercept (D1) ---
+    # Fires before the generic "why" → _answer_why() (full Decision Trace) catch.
+    # ONLY fires when a likelihood token is present so that:
+    #   "Why did you recommend REDUCE?"   → no likelihood token → falls through to _answer_why ✓
+    #   "Why is crude oil breach MEDIUM?" → "medium" token present → routed here         ✓
+    if _is_breaker_likelihood_question(q, d):
+        return _answer_breaker_likelihood_question(question, q, d)
 
     # --- Risk / thesis breakers ---
     if any(kw in q for kw in ("risk", "breaker", "break", "concern", "downside", "bear")):
@@ -281,16 +439,369 @@ def render_followup(question: str, d: InvestmentDecisionAssessment) -> str:
 # Follow-up answer builders — all read from structured assessment fields
 # ---------------------------------------------------------------------------
 
+def _answer_breaker_specific(
+    question: str,
+    d: InvestmentDecisionAssessment,
+) -> "str | None":
+    """
+    Search for a named thesis breaker condition in the question and return a
+    focused single-breaker block.
+
+    Architecture boundary:
+      Reads from d.thesis_breakers only — no pipeline re-run, no LLM calls.
+      Returns None if no breaker condition text is found in the question,
+      so the caller (render_followup) falls through to existing handlers.
+
+    Matching strategy (priority order):
+      1. Exact substring: tb.condition.lower() is contained in question.lower()
+      2. 4-word anchor: any consecutive 4-word window from the condition appears
+         in question.lower() — robust to partial phrasing by the user
+      3. Short condition (< 4 words): majority of content words (len > 3) match
+
+    Multiple matches: all matched breakers are returned, separated by a divider.
+
+    Phase 11B contract (PD-1):
+      UNKNOWN likelihood is displayed as-is — never coerced to MEDIUM.
+    """
+    if not d.thesis_breakers:
+        return None
+
+    q = question.lower()
+    matched = []
+
+    # Phase 11B P0-1: search severity-contributing breakers first; include
+    # monitoring-only ones only if they also match (user may ask about them).
+    for tb in d.thesis_breakers:  # iterate all — is_monitoring_only is display-only here
+        condition  = getattr(tb, "condition", str(tb))
+        cond_lower = condition.lower()
+
+        # Strategy 1: exact full-condition substring
+        hit = cond_lower in q
+
+        # Strategy 2: 4-word consecutive anchor phrase
+        if not hit:
+            words = cond_lower.split()
+            if len(words) >= 4:
+                for i in range(len(words) - 3):
+                    anchor = " ".join(words[i : i + 4])
+                    if anchor in q:
+                        hit = True
+                        break
+            elif words:
+                # Short condition (< 4 words): require majority of content words.
+                # D2: widened to len >= 3 with stop-word exclusion so domain-specific
+                # 3-char terms ("oil", "wti", "bbl", "gas") can participate.
+                raw = _re.sub(r"[^\w\s]", " ", " ".join(words)).split()
+                content = [w for w in raw if len(w) >= 3 and w not in _BREAKER_STOP_WORDS]
+                if content:
+                    n_match = sum(1 for w in content if w in q)
+                    hit = n_match >= max(2, len(content) // 2)
+
+        if hit:
+            matched.append(tb)
+
+    if not matched:
+        return None
+
+    blocks = []
+    for tb in matched:
+        condition  = getattr(tb, "condition", str(tb))
+        likelihood = getattr(tb, "likelihood", "?")
+        rationale  = getattr(tb, "likelihood_rationale", "") or "Not stated."
+        evidence   = list(getattr(tb, "evidence", []) or [])
+        monitor    = getattr(tb, "monitoring_indicator", "") or "Not stated."
+        trigger    = getattr(tb, "trigger_action", "") or "Not stated."
+
+        is_mon = getattr(tb, "is_monitoring_only", False)
+        header = (
+            "Monitoring indicator (did not affect Gate 5 severity)"
+            if is_mon else "Thesis breaker (severity-contributing)"
+        )
+        lines = [
+            f"{header}: {_md_safe(condition)}",
+            "",
+            f"Likelihood:     {likelihood}",
+            f"Rationale:      {rationale}",
+            "",
+            "Evidence:",
+        ]
+        if evidence:
+            for ev in evidence:
+                lines.append(f"  — {ev}")
+        else:
+            lines.append("  No specific evidence stored for this breaker.")
+        lines += [
+            "",
+            f"Monitor:        {monitor}",
+            f"Trigger action: {trigger}",
+        ]
+        blocks.append("\n".join(lines))
+
+    divider = "\n\n" + "─" * 40 + "\n\n"
+    footer  = f"\n\n[Decision-support only. This analysis is from {d.analysis_date}.]"
+    return divider.join(blocks) + footer
+
+
+def _answer_breaker_likelihood_question(
+    question: str,
+    q: str,
+    d: InvestmentDecisionAssessment,
+) -> str:
+    """
+    D1 handler for "Why is X MEDIUM/HIGH/LOW/UNKNOWN?" questions.
+
+    Called after _answer_breaker_specific() already returned None (no exact / anchor
+    / short-condition match).  Applies fuzzy content-word matching with the widened
+    D2 filter (len >= 3, stop-word excluded) and a low threshold (score >= 2) to find
+    the *closest* stored breaker, then returns a focused single-breaker block.
+
+    When found: returns the block plus an explicit mismatch note if the user's phrasing
+    differs from the stored condition (e.g. user said "$50" but condition says "$60").
+    This satisfies the PO requirement: "do not silently equate $50 and $60."
+
+    When no fuzzy match: returns a narrow all-breakers listing (likelihoods +
+    rationales) — never the full five-gate Decision Trace.
+
+    Phase 11B PD-1 contract: UNKNOWN likelihood preserved as-is.
+    """
+    # Phase 11B P0-1: fuzzy match against severity-contributing breakers first;
+    # if no match found there, fall back to all breakers (user may ask about monitoring items).
+    breakers = list(d.thesis_breakers or [])
+    if not breakers:
+        return (
+            f"No thesis breakers are recorded for {d.company_name} ({d.ticker}) "
+            f"as of {d.analysis_date}."
+        )
+
+    _sev_b = _severity_breakers(breakers)
+    _search_pool = _sev_b if _sev_b else breakers
+
+    # Fuzzy match: count content words from the condition that appear in q.
+    # Uses the same widened D2 filter (_BREAKER_STOP_WORDS, len >= 3).
+    scored: list = []
+    q_words = _word_set(q)
+    for tb in _search_pool:
+        condition = getattr(tb, "condition", str(tb))
+        score = _breaker_overlap_score(q_words, condition)
+        if score >= 2:
+            scored.append((score, tb))
+
+    if scored:
+        # Return the highest-scoring match
+        scored.sort(key=lambda x: x[0], reverse=True)
+        _, tb = scored[0]
+        condition  = getattr(tb, "condition", str(tb))
+        likelihood = getattr(tb, "likelihood", "?")
+        rationale  = getattr(tb, "likelihood_rationale", "") or "Not stated."
+        evidence   = list(getattr(tb, "evidence", []) or [])
+        monitor    = getattr(tb, "monitoring_indicator", "") or "Not stated."
+        trigger    = getattr(tb, "trigger_action", "") or "Not stated."
+
+        lines = [
+            f"Thesis breaker: {_md_safe(condition)}",
+            "",
+            f"Likelihood:     {likelihood}",
+            f"Rationale:      {rationale}",
+            "",
+            "Evidence:",
+        ]
+        if evidence:
+            for ev in evidence:
+                lines.append(f"  — {ev}")
+        else:
+            lines.append("  No specific evidence stored for this breaker.")
+        lines += [
+            "",
+            f"Monitor:        {monitor}",
+            f"Trigger action: {trigger}",
+        ]
+
+        # Mismatch note: when the stored condition text is NOT a substring of the
+        # user's question, explicitly call out the potential difference so that the
+        # user is never misled (e.g. "$50" in question vs "$60" in stored condition).
+        if condition.lower() not in q:
+            lines += [
+                "",
+                "─" * 40,
+                f"Note: The stored breaker condition is: '{_md_safe(condition)}'",
+                "Your question may reference a different threshold or phrasing.",
+                "If you intended a different scenario, consider using the What-If panel.",
+            ]
+
+        lines.append(f"\n[Decision-support only. This analysis is from {d.analysis_date}.]")
+        return "\n".join(lines)
+
+    # No fuzzy match — return all breakers with conditions, likelihoods, and rationales.
+    # This is narrower than the full Decision Trace (no gate lines, no decision path).
+    # Phase 11B P0-1: separate severity-contributing from monitoring-only.
+    _sev_fb = _severity_breakers(breakers)
+    _mon_fb = _monitoring_breakers(breakers)
+    parts = [
+        f"Thesis breakers for {d.company_name} ({d.ticker}) with likelihood assessments:\n"
+    ]
+    if _sev_fb:
+        parts.append("Severity-contributing:")
+        for tb in _sev_fb:
+            lk   = getattr(tb, "likelihood", "?")
+            cond = getattr(tb, "condition", str(tb))
+            rat  = getattr(tb, "likelihood_rationale", "") or ""
+            evs  = list(getattr(tb, "evidence", []) or [])
+            parts.append(f"[{lk}] {_md_safe(cond)}")
+            if rat:
+                parts.append(f"  Rationale: {rat}")
+            for ev in evs[:2]:
+                parts.append(f"  — {ev}")
+    if _mon_fb:
+        parts.append("\nMonitoring indicators (did not affect Gate 5 severity):")
+        for tb in _mon_fb:
+            lk   = getattr(tb, "likelihood", "?")
+            cond = getattr(tb, "condition", str(tb))
+            rat  = getattr(tb, "likelihood_rationale", "") or ""
+            parts.append(f"[{lk}] {_md_safe(cond)}")
+            if rat:
+                parts.append(f"  Rationale: {rat}")
+
+    parts.append(
+        f"\nCould not identify a single stored breaker matching your question exactly. "
+        f"The stored breaker conditions for {d.ticker} are listed above."
+    )
+    parts.append(f"\n[Decision-support only. This analysis is from {d.analysis_date}.]")
+    return "\n".join(parts)
+
+
+def _answer_gate5_explanation(d: InvestmentDecisionAssessment) -> str:
+    """
+    Focused Gate 5 adversarial challenge explanation.
+
+    Returns: adversarial risk level, breaker count breakdown (HIGH / MEDIUM /
+    UNKNOWN / LOW), effective medium-equivalent count, severity threshold crossed,
+    and each contributing breaker with its condition, likelihood, and rationale.
+
+    Does NOT include Gates 1–4 information.  Does NOT return the full five-gate
+    Decision Trace.
+
+    Phase 11B PD-1 contract:
+      - UNKNOWN treated as MEDIUM-equivalent for severity only.
+      - Displayed as UNKNOWN everywhere else (counts, per-breaker block).
+    """
+    # Find Gate 5 result
+    g5 = next(
+        (gr for gr in (d.gate_results or []) if getattr(gr, "gate_number", None) == 5),
+        None,
+    )
+    adversarial_risk = getattr(g5, "adversarial_risk", "UNKNOWN") if g5 else "UNKNOWN"
+    g5_confidence    = getattr(g5, "confidence", "") if g5 else ""
+
+    # Phase 11B P0-1: severity counts use only severity-contributing breakers
+    # (monitoring-only items did NOT enter the Gate 5 n_high / n_medium_equiv calc).
+    _sev_bkrs    = _severity_breakers(d.thesis_breakers)
+    _mon_bkrs    = _monitoring_breakers(d.thesis_breakers)
+    breakers     = _sev_bkrs
+    n_high       = sum(1 for b in breakers if getattr(b, "likelihood", "") == "HIGH")
+    n_med_only   = sum(1 for b in breakers if getattr(b, "likelihood", "") == "MEDIUM")
+    n_unknown    = sum(1 for b in breakers if getattr(b, "likelihood", "") == "UNKNOWN")
+    n_low        = sum(1 for b in breakers if getattr(b, "likelihood", "") == "LOW")
+    # Severity calc: HIGH + MEDIUM + UNKNOWN all count as medium-equivalent
+    n_med_equiv  = n_high + n_med_only + n_unknown
+
+    # Which threshold was crossed?
+    if n_high >= 1:
+        severity_reason = (
+            f"{n_high} HIGH-likelihood breaker(s) present → automatic SEVERE "
+            "(any single HIGH breaker triggers SEVERE regardless of other counts)."
+        )
+    elif n_med_equiv >= 4:
+        severity_reason = (
+            f"{n_med_equiv} medium-equivalent breaker(s) (MEDIUM + UNKNOWN each count as "
+            f"MEDIUM-equivalent for severity) ≥ 4 threshold → SEVERE."
+        )
+    elif n_med_equiv >= 2:
+        severity_reason = (
+            f"{n_med_equiv} medium-equivalent breaker(s) ≥ 2 threshold → HIGH."
+        )
+    elif n_med_equiv >= 1:
+        severity_reason = (
+            f"{n_med_equiv} medium-equivalent breaker(s) ≥ 1 threshold → MODERATE."
+        )
+    else:
+        severity_reason = "No HIGH or MEDIUM-equivalent breakers → LOW."
+
+    lines = [
+        f"Gate 5 — Adversarial Challenge  ({d.company_name}, {d.ticker})",
+        "",
+        f"Adversarial risk:  {adversarial_risk}",
+    ]
+    if g5_confidence:
+        lines.append(f"Gate 5 confidence: {g5_confidence}")
+    lines += [
+        "",
+        "BREAKER COUNTS:",
+        f"  {n_high} HIGH  /  {n_med_only} MEDIUM  /  {n_unknown} UNKNOWN  /  {n_low} LOW",
+        f"  Medium-equivalent (HIGH + MEDIUM + UNKNOWN): {n_med_equiv}",
+        "",
+        "SEVERITY LOGIC:",
+        f"  {severity_reason}",
+        "  (UNKNOWN is treated conservatively as MEDIUM-equivalent for severity",
+        "   calculation only — displayed as UNKNOWN in all other contexts.)",
+        "",
+    ]
+
+    if breakers:
+        lines.append("CONTRIBUTING THESIS BREAKERS (severity-contributing):")
+        for tb in breakers:
+            lk   = getattr(tb, "likelihood", "?")
+            cond = getattr(tb, "condition", str(tb))
+            rat  = getattr(tb, "likelihood_rationale", "") or ""
+            lines.append(f"  [{lk}] {_md_safe(cond)}")
+            if rat:
+                lines.append(f"        Rationale: {rat}")
+    else:
+        lines.append("  No severity-contributing thesis breakers.")
+
+    if _mon_bkrs:
+        lines += [
+            "",
+            "MONITORING INDICATORS (did NOT affect Gate 5 severity):",
+        ]
+        for tb in _mon_bkrs:
+            lk   = getattr(tb, "likelihood", "?")
+            cond = getattr(tb, "condition", str(tb))
+            mon  = getattr(tb, "monitoring_indicator", "") or ""
+            lines.append(f"  [{lk}] {_md_safe(cond)}")
+            if mon:
+                lines.append(f"        Monitor: {mon}")
+
+    lines += [
+        "",
+        f"[Decision-support only. This analysis is from {d.analysis_date}.]",
+    ]
+    return "\n".join(lines)
+
+
 def _answer_risks(d: InvestmentDecisionAssessment) -> str:
     parts = [f"Key risks and thesis breakers for {d.company_name} ({d.ticker}):\n"]
 
-    if d.thesis_breakers:
-        parts.append("THESIS BREAKERS:")
-        for tb in d.thesis_breakers:
+    # Phase 11B P0-1: separate severity-contributing from monitoring-only
+    _sev_bkrs_r = _severity_breakers(d.thesis_breakers)
+    _mon_bkrs_r = _monitoring_breakers(d.thesis_breakers)
+    if _sev_bkrs_r:
+        parts.append("THESIS BREAKERS (severity-contributing):")
+        for tb in _sev_bkrs_r:
             likelihood = getattr(tb, "likelihood", "?")
             condition  = getattr(tb, "condition", str(tb))
             monitor    = getattr(tb, "monitoring_indicator", "")
-            parts.append(f"  [{likelihood}] {condition}")
+            parts.append(f"  [{likelihood}] {_md_safe(condition)}")
+            if monitor:
+                parts.append(f"         Monitor: {monitor}")
+    elif d.thesis_breakers:
+        parts.append("THESIS BREAKERS: None severity-contributing.")
+    if _mon_bkrs_r:
+        parts.append("\nMONITORING INDICATORS (did not affect Gate 5 severity):")
+        for tb in _mon_bkrs_r:
+            likelihood = getattr(tb, "likelihood", "?")
+            condition  = getattr(tb, "condition", str(tb))
+            monitor    = getattr(tb, "monitoring_indicator", "")
+            parts.append(f"  [{likelihood}] {_md_safe(condition)}")
             if monitor:
                 parts.append(f"         Monitor: {monitor}")
     if d.key_risks:
@@ -1195,12 +1706,15 @@ def _answer_holding_horizon(d: InvestmentDecisionAssessment) -> str:
         )
 
     if d.thesis_breakers:
+        # Phase 11B P0-1: prefer severity-contributing breakers for the long-horizon view.
+        _sev_lh = _severity_breakers(d.thesis_breakers)
+        _display_lh = _sev_lh if _sev_lh else d.thesis_breakers
         parts.append("\nThesis breakers are more important on a long horizon — they")
         parts.append("represent conditions that would invalidate the thesis before it can compound:")
-        for tb in d.thesis_breakers[:3]:
+        for tb in _display_lh[:3]:
             parts.append(f"  [{tb.likelihood}] {tb.condition}")
-        if len(d.thesis_breakers) > 3:
-            parts.append(f"  … and {len(d.thesis_breakers) - 3} more (see full assessment)")
+        if len(_display_lh) > 3:
+            parts.append(f"  … and {len(_display_lh) - 3} more (see full assessment)")
 
     if d.what_would_change_conclusion:
         parts.append(f"\nWhat would change the long-term conclusion:\n  {d.what_would_change_conclusion}")
@@ -1344,10 +1858,6 @@ def _answer_why(d: InvestmentDecisionAssessment) -> str:
         parts.append("\nPhilosophy alignment notes:")
         for note in d.philosophy_alignment_notes[:3]:
             parts.append(f"  • {note}")
-    parts.append(
-        f"\n[This reasoning is produced by the Phase 7 hierarchical gate system.\n"
-        f" Gate results are stored in decision.gate_results for full audit trail.]"
-    )
     return "\n".join(parts)
 
 

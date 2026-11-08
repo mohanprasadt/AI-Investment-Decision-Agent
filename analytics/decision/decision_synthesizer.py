@@ -407,6 +407,8 @@ def make_investment_decision(
         # FCF annual chain (Phase 9.6)
         fcf_annual_breakdown=_fcf_breakdown,
         fcf_shares_outstanding=_fcf_shares,
+        # Valuation zone (Phase 11B) — stored for scenario engine reuse
+        valuation_zone=val_zone if isinstance(val_zone, str) else str(val_zone),
     )
 
 

@@ -7,6 +7,8 @@ This documentation exists for two purposes:
 1. Enable the Product Owner to understand, manage, and make decisions about the product without reading source code.
 2. Provide a learning record of Product Owner practices applied throughout the project.
 
+> **Update 2026-10-11:** A discovery review created the authoritative [feature inventory and roadmap](product/product-feature-inventory-and-roadmap.md). Where this pack disagrees with it (Phase 11 work, test counts, Gate 5 behaviour), the roadmap and its findings register take precedence until these pages are reconciled.
+
 > **Note:** Documentation reflects the repository as inspected at Phase 10.6. All claims are grounded in actual code or established project history. Proposed items are clearly labelled `PROPOSED`. Reconstructed items are labelled `[RECONSTRUCTED]`.
 
 ---
@@ -17,7 +19,10 @@ This documentation exists for two purposes:
 |----------|---------------|
 | What problem are we solving? | [Product Vision](product/product-vision.md) |
 | What is the MVP? | [MVP Definition](product/mvp-definition.md) |
-| Where are we in the roadmap? | [Roadmap](product/roadmap.md) |
+| What is the authoritative feature status? | [Product Feature Inventory and Roadmap](product/product-feature-inventory-and-roadmap.md) |
+| How is the system built today (diagrams)? | [Architecture Diagrams](architecture/architecture-diagrams.md) |
+| How must the roadmap be kept up to date? | [Roadmap Maintenance Protocol](governance/roadmap-maintenance-protocol.md) |
+| Where are we in the roadmap (phase history)? | [Roadmap](product/roadmap.md) |
 | What do we actually have today? | [Current State](product/current-state.md) |
 | How does the system work? | [Architecture Overview](architecture/architecture-overview.md) |
 | How does the decision get made? | [Investment Decision Flow](logic/investment-decision-flow.md) |

@@ -1,5 +1,7 @@
 # Product Backlog
 
+> **Status pointer (2026-10-11):** Items B1-B16 below are the original candidate list. Their current status and priority are tracked in the [Product Feature Inventory and Roadmap](product-feature-inventory-and-roadmap.md); do not duplicate status here.
+
 > **Status:** PROPOSED — no items are committed. PO decision required before any item moves to a phase brief.  
 > **Last updated:** Phase 10.6
 

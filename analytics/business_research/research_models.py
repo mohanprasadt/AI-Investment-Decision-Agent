@@ -476,6 +476,12 @@ class BullBearAssessment:
 
     # Thesis breakers — conditions that would make you NOT invest / EXIT
     thesis_breakers: List[str] = field(default_factory=list)
+    # Phase 11B: structured breaker details from LLM (populated by orchestrator).
+    # Each dict: {"condition": str, "likelihood": "LOW|MEDIUM|HIGH|UNKNOWN",
+    #             "evidence": [str, ...], "likelihood_rationale": str}
+    # When present, gate5_adversarial uses these instead of thesis_breakers strings.
+    # When empty (quantitative fallback / old cache), falls back to thesis_breakers.
+    thesis_breaker_details: List[dict] = field(default_factory=list)
 
     # Devil's advocate note: what evidence was found AGAINST the thesis?
     devils_advocate_research_note: str = ""

@@ -385,6 +385,133 @@ def _render_decision_panel(manager: ConversationManager) -> None:
             for lim in limitations[:8]:
                 st.write(f"• {lim}")
 
+    # ── Why this decision? (Phase 11A-2: gate-by-gate Decision Trace) ────────
+    with st.expander("🔍 Why this decision?"):
+        try:
+            from analytics.decision.decision_trace import (
+                build_decision_trace, render_decision_trace,
+            )
+            _trace = build_decision_trace(assessment)
+            st.code(render_decision_trace(_trace), language=None)
+        except Exception as _exc:
+            st.warning(f"Decision trace unavailable: {_exc}")
+
+    # ── What-if Scenario (Phase 11B: per-breaker likelihood what-if) ──────────
+    with st.expander("🎯 What-if Scenario: Adjust Thesis Breaker Likelihoods"):
+        st.caption(
+            "Explore how the decision would change if thesis breaker likelihoods "
+            "were different. **This does NOT change the system's baseline.** "
+            "Overrides are session-only and are never persisted."
+        )
+
+        _breakers = getattr(assessment, "thesis_breakers", [])
+        if not _breakers:
+            st.info("No thesis breakers available for this analysis.")
+        else:
+            _LIKELIHOOD_OPTIONS = ["LOW", "MEDIUM", "HIGH"]
+
+            st.markdown("**Thesis Breakers** — adjust likelihoods for your scenario:")
+            _overrides_input = []
+
+            for _i, _tb in enumerate(_breakers):
+                _lk  = getattr(_tb, "likelihood", "MEDIUM")
+                _cond = getattr(_tb, "condition", str(_tb))
+                _ev   = getattr(_tb, "evidence", [])
+                _rat  = getattr(_tb, "likelihood_rationale", "")
+
+                _col1, _col2 = st.columns([4, 1])
+                with _col1:
+                    # Show UNKNOWN distinctly — never display it as MEDIUM
+                    _lk_display = f"[{_lk}]" if _lk != "UNKNOWN" else "[UNKNOWN ⚠]"
+                    st.markdown(f"{_lk_display} {_cond[:120]}")
+                    if _rat:
+                        st.caption(f"Rationale: {_rat}")
+                    elif _ev:
+                        st.caption(" · ".join(str(e) for e in _ev[:2]))
+                with _col2:
+                    # For UNKNOWN baseline, default selection to MEDIUM (conservative assumption)
+                    _sel_default = _lk if _lk in _LIKELIHOOD_OPTIONS else "MEDIUM"
+                    _sel = st.selectbox(
+                        "Scenario:",
+                        options=_LIKELIHOOD_OPTIONS,
+                        index=_LIKELIHOOD_OPTIONS.index(_sel_default),
+                        key=f"scenario_lk_{_i}",
+                        label_visibility="collapsed",
+                    )
+                _overrides_input.append((_lk, _cond, _sel))
+
+            _active_overrides = [
+                (bl, cond, ul)
+                for bl, cond, ul in _overrides_input
+                if ul != bl and bl != "UNKNOWN"  # UNKNOWN baseline always treated as override
+                or (bl == "UNKNOWN" and ul != "MEDIUM")  # UNKNOWN→non-MEDIUM is an override
+            ]
+            # Simplify: any change from the dropdown default is an override
+            # Recalculate: override when user selection differs from baseline (or UNKNOWN default)
+            _active_overrides = []
+            for _bl, _cond, _ul in _overrides_input:
+                _effective_bl = _bl if _bl in _LIKELIHOOD_OPTIONS else "MEDIUM"
+                if _ul != _effective_bl:
+                    _active_overrides.append((_bl, _cond, _ul))
+
+            _apply_disabled = (len(_active_overrides) == 0)
+            if st.button("▶ Apply Scenario", disabled=_apply_disabled, key="apply_scenario_btn"):
+                try:
+                    from analytics.decision.scenario_engine import run_scenario
+                    from analytics.decision.decision_models import BreakerOverride
+
+                    _override_objs = [
+                        BreakerOverride(
+                            condition=_cond,
+                            baseline_likelihood=_bl,
+                            user_likelihood=_ul,
+                        )
+                        for _bl, _cond, _ul in _active_overrides
+                    ]
+                    _result = run_scenario(assessment, _override_objs)
+                    st.session_state["last_scenario"] = _result
+                except Exception as _exc:
+                    st.error(f"Scenario calculation failed: {_exc}")
+                    st.session_state.pop("last_scenario", None)
+
+            # Display last scenario result (persists across re-renders until new analysis)
+            _scenario = st.session_state.get("last_scenario")
+            if _scenario is not None:
+                st.markdown("---")
+                st.markdown("**Scenario Result**")
+                _c1, _c2 = st.columns(2)
+                with _c1:
+                    st.metric("System Baseline Risk",   _scenario.baseline_adversarial_risk)
+                    st.metric("System Baseline Action", _scenario.baseline_action)
+                with _c2:
+                    _risk_delta = (
+                        "↑ higher risk" if _scenario.scenario_adversarial_risk > _scenario.baseline_adversarial_risk
+                        else ("↓ lower risk" if _scenario.scenario_adversarial_risk < _scenario.baseline_adversarial_risk
+                              else "unchanged")
+                    )
+                    st.metric(
+                        "Scenario Risk",
+                        _scenario.scenario_adversarial_risk,
+                        delta=_risk_delta if _scenario.scenario_adversarial_risk != _scenario.baseline_adversarial_risk else None,
+                    )
+                    st.metric(
+                        "Scenario Action",
+                        _scenario.scenario_action,
+                        delta="⚠ changed" if _scenario.decision_changed else None,
+                        delta_color="inverse" if _scenario.decision_changed else "off",
+                    )
+
+                if _scenario.decision_changed:
+                    st.warning(
+                        f"⚠ Under this scenario the action would change: "
+                        f"**{_scenario.baseline_action}** → **{_scenario.scenario_action}**"
+                    )
+                else:
+                    st.success("Decision unchanged under this scenario.")
+
+                st.caption(f"Scenario: {_scenario.scenario_note}")
+                st.caption("⚠ System baseline is unchanged. This scenario is not persisted.")
+
     # ── Full Analysis (raw rendered report) ───────────────────────────────────
     with st.expander("📄 Full Analysis Report"):
         st.markdown("```\n" + session.rendered_report + "\n```")

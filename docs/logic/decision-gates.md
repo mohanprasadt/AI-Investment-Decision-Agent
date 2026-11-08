@@ -110,11 +110,39 @@ The investment decision is not a weighted score. It is a sequential pipeline of 
 | Risk level | Meaning | Impact on action |
 |------------|---------|-----------------|
 | LOW | No credible thesis breakers identified | No constraint |
-| MODERATE | Thesis breakers exist but are unlikely or manageable | Minor constraint |
-| HIGH | Significant risks to the thesis; monitoring required | Caps at WATCH |
-| SEVERE | One or more credible, material thesis breakers | Forces REDUCE or EXIT |
+| MODERATE | Thesis breakers exist but are unlikely or manageable | No action change (confidence noted) |
+| HIGH | Significant risks to the thesis; monitoring required | Downgrades Gate 5 confidence by −0.4; does NOT change the action or cap it at WATCH |
+| SEVERE | One or more credible, material thesis breakers | Forces REDUCE (existing + WATCH/WAIT) or HOLD (existing + ACCUMULATE/START_SMALL); new positions capped at WATCH |
 
-**Override rule:** A SEVERE adversarial finding overrides all other gate outputs. Even if Gate 2 shows EXCELLENT quality and Gate 3 shows an ACCUMULATE zone, a SEVERE adversarial risk produces REDUCE or EXIT. This is the highest-priority gate.
+> **Important:** HIGH does **not** cap the final action at WATCH. Only SEVERE overrides the action. HIGH's only effect is a confidence downgrade in the Gate 5 GateResult (avg confidence − 0.4). This is a common documentation error — the code in `_select_action()` is the source of truth.
+
+**Override rule:** A SEVERE adversarial finding overrides all other gate outputs in `_select_action()`:
+- Existing position + WATCH or WAIT starting action → REDUCE
+- Existing position + ACCUMULATE or START_SMALL starting action → HOLD
+- New position → action capped at WATCH
+
+**Severity thresholds** (computed in `evaluate_gate5()`, unchanged since Phase 7):
+```
+n_high >= 1               → SEVERE
+n_medium_equiv >= 4       → SEVERE
+n_medium_equiv >= 2       → HIGH
+  OR n_bear >= 6          → HIGH
+n_medium_equiv >= 1       → MODERATE
+  OR n_bear >= 3          → MODERATE
+else                      → LOW
+```
+where `n_medium_equiv = n_medium + n_unknown` (UNKNOWN is treated conservatively as MEDIUM-equivalent for severity counting only).
+
+**UNKNOWN likelihood treatment:** When the LLM cannot determine likelihood from available evidence, it assigns UNKNOWN. UNKNOWN is deliberately treated as MEDIUM-equivalent in the severity count — a conservative design that prevents underestimating risk from ambiguous data. UNKNOWN is always displayed as UNKNOWN in the UI and Decision Trace; it is never coerced to MEDIUM in output.
+
+**Thesis breaker types (Phase 11B P0-1 distinction):**
+
+| Type | Source | Enters severity calc? | Displayed as |
+|------|--------|----------------------|--------------|
+| Severity-contributing | LLM bull/bear analysis (`thesis_breaker_details`) + structural risk assessment | Yes — feeds n_high / n_medium_equiv | "Severity-contributing thesis breakers" |
+| Monitoring indicator | Generic forward-looking watchlist items (moat erosion, valuation assumption break) added by `extract_thesis_breakers()` | No — tagged `is_monitoring_only=True` | "Monitoring indicators" |
+
+The monitoring indicators (moat erosion, valuation assumption break) are added by `extract_thesis_breakers()` for display purposes only. They are NOT present in `evaluate_gate5()` and therefore do NOT affect the severity or confidence calculation. They appear in the UI as a separate section with an explicit disclaimer.
 
 **Thesis breakers** are specific, identifiable conditions — not generic sector risks. Each thesis breaker specifies what to monitor and what action to take if it materialises.
 
@@ -135,8 +163,8 @@ Gate 3 zone           → START_SMALL / ACCUMULATE / WATCH / WAIT
 
 Final action before Gate 5 = min(Gate 2 cap, Gate 3 zone)
 
-Gate 5 SEVERE   → REDUCE or EXIT (overrides everything)
-Gate 5 HIGH     → caps at WATCH
+Gate 5 SEVERE   → REDUCE or HOLD (overrides everything; see severity rules above)
+Gate 5 HIGH     → confidence downgraded only; action is NOT capped or changed
 Gate 5 LOWER    → no change
 ```
 
@@ -150,7 +178,7 @@ Gate 5 LOWER    → no change
 | `ACCUMULATE` | GOOD+ quality, strong margin of safety, intact thesis | Add meaningfully; valuation is compelling |
 | `WATCH` | Quality OK but price not compelling, or WATCH tier quality | No action; monitor for a better entry or quality improvement |
 | `HOLD` | Existing position, thesis intact, no strong case to add or reduce | Maintain position; review on next earnings |
-| `REDUCE` | Quality deteriorating or HIGH adversarial risk | Trim position; reassess thesis |
+| `REDUCE` | Quality deteriorating (CONCERN tier) or SEVERE adversarial risk (existing + WATCH/WAIT action) | Trim position; reassess thesis |
 | `EXIT` | SEVERE adversarial risk or CONCERN quality tier | Exit position; thesis is broken |
 | `WAIT_INSUFFICIENT_EVIDENCE` | Gate 1 fails (no research) | Cannot proceed; need business research |
 | `WATCH_PENDING_DATA` | Price unknown or stale | Action suppressed; refresh data |

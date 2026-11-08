@@ -33,6 +33,7 @@ or REDUCE review for existing holders. This is not automatic — it is
 flagged for the synthesizer to apply with judgment.
 """
 
+import re
 import sys
 from pathlib import Path
 from typing import Optional, List
@@ -44,6 +45,65 @@ from analytics.decision.decision_models import (
 )
 from analytics.business_research.research_models import BusinessResearchAssessment
 from analytics.portfolio.portfolio_models import PortfolioPositionContext
+
+
+# ---------------------------------------------------------------------------
+# Shared deterministic severity function
+# ---------------------------------------------------------------------------
+# Single source of truth for Gate 5 adversarial risk.  Called by both
+# evaluate_gate5() (inline) and scenario_engine.run_scenario() (via import).
+# Callers MUST pre-filter breakers to exclude is_monitoring_only=True items
+# before calling this function.
+# ---------------------------------------------------------------------------
+
+def calculate_adversarial_severity(breakers: list, n_bear: int = 0) -> str:
+    """
+    Deterministic Gate 5 severity calculation.
+
+    Parameters
+    ----------
+    breakers : list of ThesisBreaker
+        Pre-filtered to exclude is_monitoring_only=True items.
+    n_bear   : int
+        Count of bear-case evidence points from Gate 5 bear_points list.
+        Not applicable in scenario context (use 0 for scenario-only calls).
+
+    Returns
+    -------
+    'LOW' | 'MODERATE' | 'HIGH' | 'SEVERE'
+    """
+    n_high    = sum(1 for b in breakers if getattr(b, "likelihood", "") == "HIGH")
+    n_medium  = sum(1 for b in breakers if getattr(b, "likelihood", "") in ("MEDIUM", "HIGH"))
+    n_unknown = sum(1 for b in breakers if getattr(b, "likelihood", "") == "UNKNOWN")
+    n_medium_equiv = n_medium + n_unknown
+
+    if n_high >= 1:
+        return "SEVERE"
+    if n_medium_equiv >= 4:
+        return "SEVERE"
+    if n_medium_equiv >= 2 or n_bear >= 6:
+        return "HIGH"
+    if n_medium_equiv >= 1 or n_bear >= 3:
+        return "MODERATE"
+    return "LOW"
+
+
+# ---------------------------------------------------------------------------
+# Annotation-stripping helper
+# ---------------------------------------------------------------------------
+
+_ANNOTATION_PREFIX_RE = re.compile(r'^\[DATA-BOUNDARY-VIOLATION:[^\]]*\]\s*')
+
+
+def _strip_boundary_annotation(text: str) -> str:
+    """
+    Remove a leading [DATA-BOUNDARY-VIOLATION:...] annotation from a string.
+    Returns the original text unchanged when no annotation is present.
+    The annotation is preserved in BullBearAssessment for audit; this helper
+    ensures the annotation does not enter operational Gate 5 bear_points as
+    metadata noise.
+    """
+    return _ANNOTATION_PREFIX_RE.sub("", text)
 
 
 def evaluate_gate5(
@@ -64,19 +124,47 @@ def evaluate_gate5(
 
     # -----------------------------------------------------------------------
     # Source 1: Business research bear case and thesis breakers
+    # Phase 11B: use thesis_breaker_details (structured, evidence-backed) when
+    # available; fall back to thesis_breakers (plain strings → MEDIUM) otherwise.
     # -----------------------------------------------------------------------
     if research and research.bull_bear:
         bb = research.bull_bear
         if bb.bear_case_narrative:
-            bear_points.append(f"Bear case: {bb.bear_case_narrative[:200]}")
-        for breaker_text in (bb.thesis_breakers or []):
-            breakers.append(ThesisBreaker(
-                condition=breaker_text,
-                likelihood="MEDIUM",
-                impact="SEVERE",
-                monitoring_indicator="Monitor quarterly filings for signs of thesis deterioration.",
-                trigger_action="Would prompt REDUCE or EXIT review.",
-            ))
+            # K1 fix: strip [DATA-BOUNDARY-VIOLATION:...] annotation prefix before adding
+            # to bear_points.  The annotation is preserved in bb.bear_case_narrative for
+            # audit; stripping it here prevents annotation metadata from entering n_bear.
+            _bear_narrative = _strip_boundary_annotation(bb.bear_case_narrative)
+            bear_points.append(f"Bear case: {_bear_narrative[:200]}")
+
+        if bb.thesis_breaker_details:
+            # New structured path — likelihoods are evidence-backed (LOW/MEDIUM/HIGH/UNKNOWN)
+            _valid = {"LOW", "MEDIUM", "HIGH", "UNKNOWN"}
+            for detail in bb.thesis_breaker_details:
+                lk = str(detail.get("likelihood", "UNKNOWN")).upper()
+                if lk not in _valid:
+                    lk = "UNKNOWN"
+                breakers.append(ThesisBreaker(
+                    condition=detail.get("condition", ""),
+                    likelihood=lk,
+                    impact="SEVERE",
+                    monitoring_indicator="Monitor quarterly filings for signs of thesis deterioration.",
+                    trigger_action="Would prompt REDUCE or EXIT review.",
+                    evidence=detail.get("evidence", []),
+                    likelihood_rationale=detail.get("likelihood_rationale", ""),
+                    # K1: preserve unsupported evidence for audit trail
+                    unsupported_evidence=list(detail.get("unsupported_evidence", [])),
+                ))
+        else:
+            # Legacy / quantitative fallback — no evidence available; use MEDIUM
+            for breaker_text in (bb.thesis_breakers or []):
+                breakers.append(ThesisBreaker(
+                    condition=breaker_text,
+                    likelihood="MEDIUM",
+                    impact="SEVERE",
+                    monitoring_indicator="Monitor quarterly filings for signs of thesis deterioration.",
+                    trigger_action="Would prompt REDUCE or EXIT review.",
+                ))
+
         for neg in (bb.negative_evidence_found or []):
             bear_points.append(f"Negative evidence: {neg.fact[:150]}")
         if bb.confirmation_bias_check:
@@ -92,6 +180,8 @@ def evaluate_gate5(
             severity_note = " [STRUCTURAL]" if r.risk_type == RiskType.STRUCTURAL else ""
             bear_points.append(f"High-severity risk{severity_note}: {r.description[:150]}")
             if r.risk_type == RiskType.STRUCTURAL:
+                # Structural risks from risk_assessment always use MEDIUM
+                # (no per-breaker evidence available from this source)
                 breakers.append(ThesisBreaker(
                     condition=r.description[:200],
                     likelihood="MEDIUM",
@@ -142,23 +232,21 @@ def evaluate_gate5(
                 bear_points.append(f"Quality concern: {contra[:120]}")
 
     # -----------------------------------------------------------------------
-    # Determine adversarial risk level
+    # Determine adversarial risk level — K1: delegate to shared function
     # -----------------------------------------------------------------------
-    n_breakers = len(breakers)
-    n_bear     = len(bear_points)
+    n_bear = len(bear_points)
 
-    # Assess severity: SEVERE if any breaker has HIGH likelihood
-    # or many structural risks exist
-    high_breakers = [b for b in breakers if b.likelihood == "HIGH"]
+    # Note: `breakers` here are built from thesis_breaker_details and structural
+    # risks — none carry is_monitoring_only=True (those are added only by
+    # extract_thesis_breakers(), which is NOT called in evaluate_gate5()).
+    # The shared function therefore receives a pre-filtered list by construction.
+    risk_str   = calculate_adversarial_severity(breakers, n_bear)
+    risk_level = AdversarialRisk(risk_str)
 
-    if high_breakers or n_breakers >= 4:
-        risk_level = AdversarialRisk.SEVERE
-    elif n_breakers >= 2 or n_bear >= 6:
-        risk_level = AdversarialRisk.HIGH
-    elif n_breakers >= 1 or n_bear >= 3:
-        risk_level = AdversarialRisk.MODERATE
-    else:
-        risk_level = AdversarialRisk.LOW
+    # Recompute counts for display-only breakdown (not for severity).
+    n_high    = sum(1 for b in breakers if b.likelihood == "HIGH")
+    n_unknown = sum(1 for b in breakers if b.likelihood == "UNKNOWN")
+    n_low     = sum(1 for b in breakers if b.likelihood == "LOW")
 
     # -----------------------------------------------------------------------
     # Bear case synthesis
@@ -170,19 +258,27 @@ def evaluate_gate5(
     # What would make the thesis wrong
     what_would_change = _what_would_change(research, breakers, bear_points)
 
+    n_breakers = len(breakers)  # total breaker count (used by _gate5_confidence)
     confidence = _gate5_confidence(n_bear, n_breakers, gaps)
 
+    # Breakdown for display only (not used in severity)
+    _n_med_only = sum(1 for b in breakers if b.likelihood == "MEDIUM")
+    lk_breakdown = (
+        f"Breakers: {n_high} HIGH / {_n_med_only} MEDIUM / {n_unknown} UNKNOWN / {n_low} LOW."
+    )
     return GateResult(
         gate_number=5,
         gate_name="Adversarial Challenge",
         passed=True,
         adversarial_risk=risk_level.value,
+        # K1 follow-up: expose structured n_bear so scenario_engine never parses text.
+        n_bear=n_bear,
         confidence=confidence,
         summary=(
             f"Adversarial risk: {risk_level.value}. "
-            f"{n_breakers} thesis breaker(s) identified. "
+            f"{lk_breakdown} "
             f"{n_bear} bear-case evidence point(s). "
-            f"{bear_summary[:200]}"
+            f"{bear_summary[:150]}"
         ),
         supporting_evidence=what_would_change,  # "what would change" — for audit trail
         contradictory_evidence=bear_points[:10],  # top 10 bear points
@@ -203,14 +299,34 @@ def extract_thesis_breakers(
     breakers: List[ThesisBreaker] = []
 
     if research and research.bull_bear:
-        for text in (research.bull_bear.thesis_breakers or []):
-            breakers.append(ThesisBreaker(
-                condition=text,
-                likelihood="MEDIUM",
-                impact="SEVERE",
-                monitoring_indicator="Monitor quarterly filings and management commentary.",
-                trigger_action="Would prompt REDUCE or EXIT review.",
-            ))
+        bb = research.bull_bear
+        if bb.thesis_breaker_details:
+            # Phase 11B: use evidence-backed structured details
+            _valid = {"LOW", "MEDIUM", "HIGH", "UNKNOWN"}
+            for detail in bb.thesis_breaker_details:
+                lk = str(detail.get("likelihood", "UNKNOWN")).upper()
+                if lk not in _valid:
+                    lk = "UNKNOWN"
+                breakers.append(ThesisBreaker(
+                    condition=detail.get("condition", ""),
+                    likelihood=lk,
+                    impact="SEVERE",
+                    monitoring_indicator="Monitor quarterly filings and management commentary.",
+                    trigger_action="Would prompt REDUCE or EXIT review.",
+                    evidence=detail.get("evidence", []),
+                    likelihood_rationale=detail.get("likelihood_rationale", ""),
+                    # K1: preserve unsupported evidence for audit trail
+                    unsupported_evidence=list(detail.get("unsupported_evidence", [])),
+                ))
+        else:
+            for text in (bb.thesis_breakers or []):
+                breakers.append(ThesisBreaker(
+                    condition=text,
+                    likelihood="MEDIUM",
+                    impact="SEVERE",
+                    monitoring_indicator="Monitor quarterly filings and management commentary.",
+                    trigger_action="Would prompt REDUCE or EXIT review.",
+                ))
 
     if research and research.risk_assessment:
         from analytics.business_research.research_models import RiskType
@@ -224,7 +340,10 @@ def extract_thesis_breakers(
                     trigger_action="Structural thesis break → EXIT review.",
                 ))
 
-    # Moat deterioration is always a thesis breaker if moat is central
+    # Moat deterioration is always a thesis breaker if moat is central.
+    # Phase 11B P0-1: is_monitoring_only=True — this is a generic forward-looking
+    # watchlist item, NOT a company-specific evidence-backed assessment.  It does not
+    # enter the Gate 5 severity calculation (only extract_thesis_breakers adds it).
     if research and research.moat_assessment:
         moat = research.moat_assessment
         if moat.overall_strength.value in ("Strong", "Exceptional"):
@@ -235,9 +354,13 @@ def extract_thesis_breakers(
                 impact="FATAL",
                 monitoring_indicator="Watch ROIC trend, market share data, and pricing realisation.",
                 trigger_action="Moat deterioration → EXIT review.",
+                is_monitoring_only=True,
             ))
 
-    # Valuation model assumption break
+    # Valuation model assumption break.
+    # Phase 11B P0-1: is_monitoring_only=True — duplicates what Gate 3 already covers
+    # (fair value range uncertainty → bear_point).  Present here for user awareness
+    # of the specific valuation assumptions to track, not as a severity input.
     if valuation and valuation.key_valuation_assumptions:
         breakers.append(ThesisBreaker(
             condition="Key valuation assumptions fail: "
@@ -246,6 +369,7 @@ def extract_thesis_breakers(
             impact="SEVERE",
             monitoring_indicator="Track actuals vs assumptions in quarterly results.",
             trigger_action="Material assumption miss → reassess fair value; consider REDUCE.",
+            is_monitoring_only=True,
         ))
 
     return breakers
