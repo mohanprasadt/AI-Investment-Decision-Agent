@@ -58,10 +58,27 @@ Four independent valuation methods (see [Valuation Framework](#valuation-framewo
 `analytics/portfolio/` — evaluates incremental position sizing, concentration impact, and sector/geography exposure using the user-supplied portfolio weight. No shares, cost, or account value is ever used.
 
 ### Phase 7: Adversarial / Risk Analysis
-`analytics/decision/gate5_adversarial.py` — stress-tests the investment thesis against identified thesis breakers. A SEVERE adversarial finding forces a REDUCE or EXIT action regardless of valuation attractiveness.
+`analytics/decision/gate5_adversarial.py` — stress-tests the investment thesis against identified thesis breakers. Each breaker carries an evidence-backed likelihood (LOW / MEDIUM / HIGH / UNKNOWN). A shared deterministic severity function (`calculate_adversarial_severity`) is used by both Gate 5 and the scenario engine, ensuring the two are always consistent. A SEVERE finding forces a REDUCE or EXIT action regardless of valuation attractiveness.
+
+**Phase 11B hardening:**
+- Bear-case evidence points are counted from a structured `n_bear` field on the Gate 5 result, not from summary-string parsing. Scenario severity is therefore immune to changes in display wording.
+- `[DATA-BOUNDARY-VIOLATION]` annotation prefixes are stripped from bear narratives before they enter the evidence count.
+- Unsupported evidence strings (referencing data outside the allowed research boundary) are preserved on each `ThesisBreaker` for audit and never promoted to decision-eligible evidence.
 
 ### Phase 7: Decision Synthesis
 `analytics/decision/decision_synthesizer.py` — combines all prior phases through a five-gate sequential filter into a final `InvestmentDecisionAssessment` with an action (START_SMALL / ACCUMULATE / WATCH / HOLD / REDUCE / EXIT / WAIT_INSUFFICIENT_EVIDENCE).
+
+### Phase 11B: Scenario Engine (What-If Analysis)
+`analytics/decision/scenario_engine.py` — lets users adjust the likelihood of any thesis breaker (LOW → MEDIUM → HIGH) without re-running the full research pipeline. The engine:
+- Recalculates Gate 5 adversarial severity using the same shared function as the original assessment.
+- Excludes monitoring-only watchlist breakers from severity (consistent with Gate 5 behaviour).
+- Preserves all breaker fields — including `is_monitoring_only` and `unsupported_evidence` — when copying overridden breakers.
+- Bear-point count is read from the structured `GateResult.n_bear` field (wording-immune).
+- Returns a `ScenarioResult` with baseline vs scenario comparison and a human-readable override note.
+
+### Phase 11A: Decision Trace and CAGR Accuracy
+- **Decision Trace** (`analytics/decision/decision_trace.py`) — produces a gate-by-gate narrative explaining why the system reached its action. Rendered in the UI under "Why this decision?"
+- **CAGR label accuracy** — the 5-year revenue CAGR is now gated on `data_years_available >= 5` as the primary signal. When fewer than 5 years of data are available the field is explicitly labelled unavailable rather than silently substituting a 3-year figure.
 
 ---
 
@@ -122,6 +139,21 @@ Gate 5 — Adversarial Stress Test    No active thesis breakers at SEVERE level
 Each gate is a hard filter. Failing Gate 1 (no business research) produces `WAIT_INSUFFICIENT_EVIDENCE` regardless of the quantitative picture. Failing Gate 5 (SEVERE adversarial risk) forces REDUCE or EXIT regardless of valuation attractiveness.
 
 The quantitative fallback (no Claude API key) intentionally fails Gate 1 and produces `WAIT_INSUFFICIENT_EVIDENCE`. This is the correct output — a valuation alone is not a decision.
+
+### Gate 5 Severity Rules
+
+```
+n_high ≥ 1                           → SEVERE
+n_medium_equiv ≥ 4                   → SEVERE
+n_medium_equiv ≥ 2  OR  n_bear ≥ 6  → HIGH
+n_medium_equiv ≥ 1  OR  n_bear ≥ 3  → MODERATE
+otherwise                            → LOW
+
+n_medium_equiv = count(MEDIUM) + count(UNKNOWN)
+Monitoring-only breakers are pre-filtered before severity calculation
+```
+
+HIGH does **not** cap or override the final action. Only SEVERE does. HIGH's only effect is a confidence downgrade on the Gate 5 result.
 
 ---
 
@@ -226,12 +258,14 @@ AI-Investment-Decision-Agent/
 │   │   ├── gate3_valuation.py           # Gate 3: valuation attractiveness
 │   │   ├── gate4_portfolio.py           # Gate 4: portfolio fit
 │   │   └── gate5_adversarial.py         # Gate 5: adversarial stress test
+│   ├── decision/
+│       └── scenario_engine.py           # Phase 11B: per-breaker likelihood what-if
 │   └── agent/
 │       ├── data_loader.py               # DataLoadResult: fetch → normalise → quality
 │       ├── valuation_builder.py         # DataLoadResult → ValuationInput
 │       ├── investment_agent.py          # Top-level agent orchestration
 │       ├── anthropic_researcher.py      # Claude API business research
-│       ├── renderer.py                  # Follow-up question renderer
+│       ├── renderer.py                  # Follow-up question renderer (FND-1 routing)
 │       ├── intent_parser.py             # Natural language intent routing
 │       └── research_orchestrator.py     # Research workflow coordination
 │
@@ -268,7 +302,9 @@ AI-Investment-Decision-Agent/
 │   ├── test_decision.py                 # Decision synthesis tests
 │   ├── test_portfolio.py                # Portfolio analytics tests
 │   ├── test_phase9*.py                  # Phase-by-phase integration tests
-│   └── test_phase99.py                  # Phase 9.9b period-alignment tests
+│   ├── test_phase99.py                  # Phase 9.9b period-alignment tests
+│   ├── test_phase11b.py                 # Phase 11B: scenario engine, Gate 5, evidence boundary (103 tests)
+│   └── test_phase11b_routing_regression.py  # FND-1 follow-up routing regression (23 tests)
 │
 ├── run_agent.py                         # Main interactive agent entry point
 ├── run_analysis.py                      # Batch analysis runner
@@ -281,9 +317,15 @@ AI-Investment-Decision-Agent/
 
 ## Current Phase
 
-**Last completed: Phase 10.6 — Documentation & Product Governance Foundation**
+**Last completed: Phase 11B — Scenario Severity Alignment and Evidence Boundary Hardening**
 
-The system now includes a conversational Streamlit UI, a 33-ticker MVP universe (25 Canada, 5 USA, 3 India), and a complete documentation pack at `docs/README.md`.
+| Phase | Summary |
+|-------|---------|
+| Phase 10.6 | Conversational Streamlit UI; 33-ticker MVP universe; documentation pack |
+| Phase 11A | Accurate CAGR labels (gated on `data_years_available`); dividend/ROIC corrections; Decision Trace |
+| Phase 11B + FND-1 | Scenario engine; shared Gate 5 severity function; structured `n_bear` field; evidence boundary enforcement; follow-up question routing corrections |
+
+The system now includes a conversational Streamlit UI, a 33-ticker MVP universe (25 Canada, 5 USA, 3 India), a per-breaker what-if scenario engine, and a complete documentation pack at `docs/README.md`.
 
 ---
 
@@ -352,18 +394,37 @@ yfinance responses are cached as flat JSON files in `data/cache/` (gitignored). 
 
 ## Testing
 
-**Current baseline: Phase 10.6 — 1,223 passed**
+**Current baseline: Phase 11B — 1,361 passed**
 
 ```
-Passed:    1,223
+Passed:    1,361
 Skipped:       1
 Failed:        5  (pre-existing — network-dependent, test_phase93b.py only)
 Errors:        3  (pre-existing — collection errors in legacy helper files)
 ```
 
-**Pre-existing failures (5):** `test_phase93b.py` makes live yfinance calls; these fail in network-restricted or rate-limited environments. Not regressions.
+Run with:
+```bash
+python -m pytest --ignore=backup-2026-11-07 -q
+```
 
-**Pre-existing collection errors (3):** `test_calculations.py`, `test_ingestion.py`, `test_quality_engine.py` each define a `def test(...)` helper that conflicts with pytest's `name` fixture. All substantive tests in those files run and pass correctly.
+**Pre-existing failures (5):** All in `test_phase93b.py`. These tests make live yfinance calls to ITC.NS (Indian stock, BSE). They fail in network-restricted or sandboxed environments. Not regressions — present since before Phase 11.
+
+**Pre-existing collection errors (3):** `test_calculations.py`, `test_ingestion.py`, `test_quality_engine.py` each define a `def test(name, condition, value=None)` helper that pytest picks up by name and cannot inject a `name` fixture. All substantive tests in those files pass correctly.
+
+**Phase 11B coverage (103 tests, `test_phase11b.py`):**
+- DEF-1: `n_bear` escalation paths in scenario severity
+- DEF-2: monitoring-only breaker exclusion after overrides
+- DEF-3: all `ThesisBreaker` fields forwarded in override copies
+- Shared severity function consistency between Gate 5 and scenario engine
+- Structured `n_bear: Optional[int] = None` sentinel (zero is authoritative; `None` triggers string fallback for legacy records)
+- Wording immunity: scenario severity unchanged by Gate 5 summary rephrasing
+- Evidence boundary: annotation-prefixed narratives do not inflate bear count
+- `unsupported_evidence` persistence through `asdict()` / JSON round-trip
+- CAGR fallback accuracy
+
+**FND-1 routing regression (23 tests, `test_phase11b_routing_regression.py`):**
+Follow-up question routing: ordinary "why is the price…" questions are not mistakenly routed to the likelihood-explanation handler; genuine breaker-likelihood questions are routed correctly.
 
 **Phase 10.5 coverage (107 tests):** pipeline, 429 fail-fast, prewarm, ticker dropdown, data status panel, Force Refresh, conversation intents, session state, UI rendering.
 
@@ -403,5 +464,5 @@ The authors and contributors accept no liability for investment decisions made b
 
 ---
 
-*Phase 10.6 — Documentation & Product Governance Foundation — September 2026*  
+*Phase 11B — Scenario Severity Alignment and Evidence Boundary Hardening — November 2026*  
 *Full documentation: [`docs/README.md`](docs/README.md)*
